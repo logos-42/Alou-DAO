@@ -762,8 +762,8 @@
       ]
     },
     "D:\\Smart ETH\\contracts\\DIAPToken.sol": {
-      "lastModificationDate": 1760792036225,
-      "contentHash": "c28169bb0100175888b2761934f28d1d",
+      "lastModificationDate": 1760798294211,
+      "contentHash": "2d4351c399e5ab8b6c3c7626840b99cf",
       "sourceName": "contracts/DIAPToken.sol",
       "solcConfig": {
         "version": "0.8.19",
@@ -805,7 +805,7 @@
       ]
     },
     "D:\\Smart ETH\\contracts\\DIAPGovernance.sol": {
-      "lastModificationDate": 1760796054634,
+      "lastModificationDate": 1760796226253,
       "contentHash": "a70572590e771daf7e1bc0d21acae71a",
       "sourceName": "contracts/DIAPGovernance.sol",
       "solcConfig": {

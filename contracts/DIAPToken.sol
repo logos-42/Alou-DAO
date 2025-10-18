@@ -60,6 +60,15 @@ contract DIAPToken is
     uint256 public stakingRewardRate; // 基础奖励率 (基点)
     uint256 public lastRewardTime;
     
+    // 动态奖励率调整相关变量
+    uint256 public constant MIN_REWARD_RATE = 100; // 最低1%年化
+    uint256 public constant MAX_REWARD_RATE = 1000; // 最高10%年化
+    uint256 public constant RATE_ADJUSTMENT_INTERVAL = 30 days; // 30天调整一次
+    
+    // 奖励率调整历史
+    mapping(uint256 => uint256) public rewardRateHistory; // blockNumber => rate
+    uint256 public lastRateAdjustment;
+    
     // 质押层级
     uint256 public constant TIER_BRONZE = 0;
     uint256 public constant TIER_SILVER = 1;
@@ -71,6 +80,14 @@ contract DIAPToken is
     uint256 public totalBurned;
     uint256 public burnRate; // 交易燃烧率 (基点)
     address public burnAddress;
+    
+    // 紧急控制机制
+    bool public emergencyPaused = false;
+    bool public emergencyWithdrawEnabled = false;
+    
+    // 时间锁机制
+    mapping(bytes32 => uint256) public pendingActions;
+    uint256 public constant TIMELOCK_DELAY = 2 days;
     
     // ============ 事件定义 ============
     
@@ -116,6 +133,16 @@ contract DIAPToken is
         uint256 lockPeriod
     );
     
+    // 紧急控制事件
+    event EmergencyPaused(uint256 timestamp);
+    event EmergencyUnpaused(uint256 timestamp);
+    event EmergencyWithdrawEnabled(uint256 timestamp);
+    event EmergencyWithdraw(address indexed user, uint256 amount);
+    
+    // 时间锁事件
+    event ActionScheduled(bytes32 indexed actionHash, uint256 executeTime);
+    event ActionExecuted(bytes32 indexed actionHash);
+    
     // ============ 初始化函数 ============
     
     function initialize() public initializer {
@@ -131,6 +158,7 @@ contract DIAPToken is
         burnRate = 25; // 0.25%
         burnAddress = address(0x000000000000000000000000000000000000dEaD);
         lastRewardTime = block.timestamp;
+        lastRateAdjustment = block.timestamp;
         
         // 初始化质押层级
         _initializeStakingTiers();
@@ -214,6 +242,7 @@ contract DIAPToken is
      * @param tier 质押层级
      */
     function stake(uint256 amount, uint256 tier) external nonReentrant whenNotPaused {
+        require(!emergencyPaused, "Contract is emergency paused");
         require(amount > 0, "Amount must be greater than 0");
         require(tier <= TIER_PLATINUM, "Invalid tier");
         
@@ -228,12 +257,22 @@ contract DIAPToken is
             uint256 existingRewards = _calculateRewards(msg.sender);
             info.pendingRewards += existingRewards;
             
-            // 检查层级是否匹配
+            // 严格的层级验证
+            uint256 newTotalAmount = info.amount + amount;
             uint256 currentTier = _getStakingTier(info.amount);
-            require(currentTier == tier, "Tier mismatch for additional stake");
+            uint256 newTier = _getStakingTier(newTotalAmount);
+            
+            // 不允许层级跳跃
+            require(newTier == currentTier, "Tier change not allowed for additional stake");
+            require(newTier == tier, "Tier mismatch");
+            
+            // 检查是否超过当前层级的最大限制
+            if (tier < TIER_PLATINUM) {
+                require(newTotalAmount < stakingTiers[tier + 1].minAmount, "Amount exceeds current tier limit");
+            }
             
             // 更新质押信息
-            info.amount += amount;
+            info.amount = newTotalAmount;
             info.lastClaimTime = block.timestamp;
         } else {
             // 首次质押
@@ -339,7 +378,7 @@ contract DIAPToken is
     }
     
     /**
-     * @dev 混合奖励分发系统
+     * @dev 动态奖励分发系统
      * @param recipient 接收者
      * @param amount 奖励数量
      */
@@ -347,29 +386,93 @@ contract DIAPToken is
         uint256 contractBalance = balanceOf(address(this));
         
         if (contractBalance >= amount) {
-            // 优先从staking池余额支付
+            // 余额充足，直接转账
             _transfer(address(this), recipient, amount);
             totalRewardsDistributed += amount;
         } else {
-            // 池内余额不足，需要铸造
-            uint256 fromPool = contractBalance;
-            uint256 toMint = amount - fromPool;
+            // 余额不足，先调整奖励率
+            _adjustRewardRate();
             
-            // 检查铸造是否超过最大供应量
-            require(totalSupply() + toMint <= MAX_SUPPLY, "Rewards exceed max supply");
+            // 重新计算奖励
+            uint256 adjustedAmount = _calculateAdjustedRewards(recipient);
             
-            // 先转移池内余额
-            if (fromPool > 0) {
-                _transfer(address(this), recipient, fromPool);
+            if (contractBalance >= adjustedAmount) {
+                _transfer(address(this), recipient, adjustedAmount);
+                totalRewardsDistributed += adjustedAmount;
+            } else {
+                // 如果调整后仍不足，使用最低奖励率
+                uint256 minReward = adjustedAmount * MIN_REWARD_RATE / stakingRewardRate;
+                if (contractBalance >= minReward) {
+                    _transfer(address(this), recipient, minReward);
+                    totalRewardsDistributed += minReward;
+                }
+                // 如果连最低奖励都无法支付，则不支付奖励
             }
-            
-            // 铸造不足部分
-            if (toMint > 0) {
-                _mint(recipient, toMint);
-            }
-            
-            totalRewardsDistributed += amount;
         }
+    }
+    
+    /**
+     * @dev 动态调整奖励率
+     * 当合约余额不足时，降低奖励率
+     * 当合约余额充足时，适当提高奖励率
+     */
+    function _adjustRewardRate() internal {
+        require(block.timestamp >= lastRateAdjustment + RATE_ADJUSTMENT_INTERVAL, "Rate adjustment too frequent");
+        
+        uint256 contractBalance = balanceOf(address(this));
+        uint256 totalStakedAmount = totalStaked;
+        
+        if (totalStakedAmount == 0) return;
+        
+        // 计算余额与质押量的比例
+        uint256 balanceRatio = contractBalance * 10000 / totalStakedAmount;
+        
+        // 根据余额比例调整奖励率
+        if (balanceRatio < 1000) { // 余额不足10%
+            // 大幅降低奖励率
+            stakingRewardRate = stakingRewardRate * 80 / 100; // 降低20%
+        } else if (balanceRatio < 2000) { // 余额不足20%
+            // 适度降低奖励率
+            stakingRewardRate = stakingRewardRate * 90 / 100; // 降低10%
+        } else if (balanceRatio > 5000) { // 余额超过50%
+            // 适当提高奖励率
+            stakingRewardRate = stakingRewardRate * 105 / 100; // 提高5%
+        }
+        
+        // 确保奖励率在合理范围内
+        if (stakingRewardRate < MIN_REWARD_RATE) {
+            stakingRewardRate = MIN_REWARD_RATE;
+        } else if (stakingRewardRate > MAX_REWARD_RATE) {
+            stakingRewardRate = MAX_REWARD_RATE;
+        }
+        
+        // 记录调整历史
+        rewardRateHistory[block.number] = stakingRewardRate;
+        lastRateAdjustment = block.timestamp;
+        
+        emit StakingRewardRateUpdated(stakingRewardRate);
+    }
+    
+    /**
+     * @dev 计算调整后的奖励
+     * @param user 用户地址
+     * @return 调整后的奖励数量
+     */
+    function _calculateAdjustedRewards(address user) internal view returns (uint256) {
+        // 基于当前调整后的奖励率重新计算奖励
+        StakingInfo memory info = stakingInfo[user];
+        if (info.amount == 0) return 0;
+        
+        uint256 tier = _getStakingTier(info.amount);
+        StakingTier memory tierInfo = stakingTiers[tier];
+        
+        uint256 timeElapsed = block.timestamp - info.lastClaimTime;
+        if (timeElapsed == 0) return info.pendingRewards;
+        
+        uint256 baseRewards = info.amount * stakingRewardRate * timeElapsed / (365 days * 10000);
+        uint256 tierRewards = baseRewards * tierInfo.multiplier / 10000;
+        
+        return info.pendingRewards + tierRewards;
     }
     
     // ============ 通缩机制 ============
@@ -414,13 +517,31 @@ contract DIAPToken is
     // ============ 管理函数 ============
     
     /**
-     * @dev 设置质押奖励率
+     * @dev 设置质押奖励率 (需要时间锁)
      * @param _rate 奖励率 (基点/年，例如500 = 5% APY)
      */
     function setStakingRewardRate(uint256 _rate) external onlyOwner {
-        require(_rate <= 1000, "Rate too high"); // 最大10%
+        bytes32 actionHash = keccak256(abi.encodePacked("setStakingRewardRate", _rate));
+        require(pendingActions[actionHash] != 0, "Action not scheduled");
+        require(pendingActions[actionHash] <= block.timestamp, "Timelock not expired");
+        
+        require(_rate <= MAX_REWARD_RATE, "Rate too high");
         stakingRewardRate = _rate;
+        delete pendingActions[actionHash];
+        
         emit StakingRewardRateUpdated(_rate);
+        emit ActionExecuted(actionHash);
+    }
+    
+    /**
+     * @dev 安排奖励率调整
+     * @param _rate 新的奖励率
+     */
+    function scheduleRewardRateChange(uint256 _rate) external onlyOwner {
+        require(_rate <= MAX_REWARD_RATE, "Rate too high");
+        bytes32 actionHash = keccak256(abi.encodePacked("setStakingRewardRate", _rate));
+        pendingActions[actionHash] = block.timestamp + TIMELOCK_DELAY;
+        emit ActionScheduled(actionHash, block.timestamp + TIMELOCK_DELAY);
     }
     
     /**
@@ -477,6 +598,48 @@ contract DIAPToken is
     }
     
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+    
+    // ============ 紧急控制函数 ============
+    
+    /**
+     * @dev 紧急暂停合约
+     */
+    function emergencyPause() external onlyOwner {
+        emergencyPaused = true;
+        emit EmergencyPaused(block.timestamp);
+    }
+    
+    /**
+     * @dev 取消紧急暂停
+     */
+    function emergencyUnpause() external onlyOwner {
+        emergencyPaused = false;
+        emit EmergencyUnpaused(block.timestamp);
+    }
+    
+    /**
+     * @dev 启用紧急提取
+     */
+    function enableEmergencyWithdraw() external onlyOwner {
+        emergencyWithdrawEnabled = true;
+        emit EmergencyWithdrawEnabled(block.timestamp);
+    }
+    
+    /**
+     * @dev 紧急提取质押代币
+     */
+    function emergencyWithdraw() external {
+        require(emergencyWithdrawEnabled, "Emergency withdraw not enabled");
+        StakingInfo storage info = stakingInfo[msg.sender];
+        require(info.amount > 0, "No staking found");
+        
+        uint256 amount = info.amount;
+        delete stakingInfo[msg.sender];
+        totalStaked -= amount;
+        
+        _transfer(address(this), msg.sender, amount);
+        emit EmergencyWithdraw(msg.sender, amount);
+    }
     
     // ============ 查询函数 ============
     

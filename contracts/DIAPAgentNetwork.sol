@@ -1,0 +1,651 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.19;
+
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+
+/**
+ * @title DIAPAgentNetwork
+ * @dev 去中心化智能体网络主合约
+ * @notice 基于DIAP协议实现智能体身份验证、通信和治理
+ */
+contract DIAPAgentNetwork is 
+    Initializable, 
+    UUPSUpgradeable, 
+    OwnableUpgradeable, 
+    ReentrancyGuardUpgradeable,
+    PausableUpgradeable 
+{
+    
+    // ============ 结构体定义 ============
+    
+    struct Agent {
+        string didDocument;        // DID文档CID (IPFS)
+        string publicKey;          // 公钥
+        uint256 reputation;        // 声誉分数 (0-10000)
+        bool isActive;            // 是否活跃
+        uint256 registrationTime; // 注册时间
+        uint256 lastActivity;     // 最后活动时间
+        uint256 stakedAmount;     // 质押代币数量
+        uint256 totalEarnings;    // 总收益
+        uint256 totalServices;    // 提供服务次数
+        bool isVerified;          // 是否通过ZKP验证
+    }
+    
+    struct Message {
+        address fromAgent;
+        address toAgent;
+        string messageCID;        // IPFS消息CID
+        uint256 timestamp;
+        bool isVerified;          // ZKP验证状态
+        uint256 fee;             // 消息费用
+    }
+    
+    struct Service {
+        address provider;
+        address consumer;
+        string serviceType;       // 服务类型
+        uint256 price;           // 服务价格
+        uint256 timestamp;
+        bool isCompleted;        // 是否完成
+        string resultCID;        // 结果CID
+    }
+    
+    // ============ 状态变量 ============
+    
+    IERC20 public token; // DIAP代币合约
+    address public verification; // DIAPVerification合约地址
+    
+    mapping(address => Agent) public agents;
+    mapping(string => address) public didToAgent;  // DID到地址映射
+    mapping(bytes32 => Message) public messages;
+    mapping(uint256 => Service) public services;
+    
+    // Gas优化：可枚举的智能体列表
+    address[] public agentList;
+    mapping(address => uint256) public agentIndex; // 智能体地址到索引的映射
+    
+    uint256 public totalAgents;
+    uint256 public totalMessages;
+    uint256 public totalServices;
+    uint256 public totalVolume;  // 总交易量
+    
+    // 网络参数
+    uint256 public registrationFee;     // 注册费用
+    uint256 public messageFee;          // 消息费用
+    uint256 public serviceFeeRate;      // 服务费用率 (基点)
+    uint256 public minStakeAmount;      // 最小质押数量
+    uint256 public reputationThreshold; // 声誉阈值
+    uint256 public lockPeriod;          // 锁定期
+    uint256 public totalStaked;         // 总质押量
+    
+    // 奖励参数
+    uint256 public rewardRate;          // 奖励率
+    uint256 public lastRewardTime;      // 上次奖励时间
+    uint256 public totalRewards;        // 总奖励
+    
+    // Gas优化：分批奖励分配
+    uint256 public constant BATCH_SIZE = 50; // 每批处理的智能体数量
+    uint256 public lastProcessedIndex;       // 上次处理的索引
+    uint256 public pendingRewards;           // 待分配奖励
+    
+    // 混合存储：链上存储关键数据，链下存储详细数据
+    mapping(address => string) public agentMetadataCID; // 智能体详细元数据CID（链下）
+    mapping(uint256 => string) public serviceMetadataCID; // 服务详细元数据CID（链下）
+    
+    // ============ 事件定义 ============
+    
+    event AgentRegistered(
+        address indexed agent, 
+        string didDocument, 
+        uint256 stakedAmount
+    );
+    
+    event AgentUnstaked(
+        address indexed agent,
+        uint256 stakedAmount
+    );
+    
+    event AgentVerified(
+        address indexed agent, 
+        bool isVerified
+    );
+    
+    event MessageSent(
+        bytes32 indexed messageId, 
+        address from, 
+        address to, 
+        uint256 fee
+    );
+    
+    event ServiceCreated(
+        uint256 indexed serviceId, 
+        address provider, 
+        address consumer, 
+        uint256 price
+    );
+    
+    event ServiceCompleted(
+        uint256 indexed serviceId, 
+        string resultCID, 
+        uint256 reward
+    );
+    
+    event ReputationUpdated(
+        address indexed agent, 
+        uint256 oldReputation, 
+        uint256 newReputation
+    );
+    
+    event RewardsDistributed(
+        uint256 totalAmount, 
+        uint256 timestamp
+    );
+    
+    // ============ 修饰符 ============
+    
+    modifier onlyRegisteredAgent() {
+        require(agents[msg.sender].isActive, "Agent not registered");
+        _;
+    }
+    
+    modifier onlyVerifiedAgent() {
+        require(agents[msg.sender].isVerified, "Agent not verified");
+        _;
+    }
+    
+    modifier validReputation(uint256 reputation) {
+        require(reputation <= 10000, "Invalid reputation score");
+        _;
+    }
+    
+    // ============ 初始化函数 ============
+    
+    function initialize(address _token) public initializer {
+        require(_token != address(0), "Invalid token address");
+        
+        __Ownable_init();
+        __UUPSUpgradeable_init();
+        __ReentrancyGuard_init();
+        __Pausable_init();
+        
+        // 设置代币合约
+        token = IERC20(_token);
+        
+        // 设置默认参数
+        registrationFee = 100 * 10**18;      // 100 代币
+        messageFee = 1 * 10**18;             // 1 代币
+        serviceFeeRate = 300;                // 3%
+        minStakeAmount = 1000 * 10**18;      // 1000 代币
+        reputationThreshold = 1000;          // 1000 声誉点
+        lockPeriod = 30 days;                // 30天锁定期
+        rewardRate = 5;                      // 5% 年化
+        lastRewardTime = block.timestamp;
+        totalStaked = 0;                     // 初始总质押量为0
+    }
+    
+    // ============ 智能体管理 ============
+    
+    /**
+     * @dev 注册智能体
+     * @param didDocument DID文档CID
+     * @param publicKey 公钥
+     * @param stakedAmount 质押代币数量
+     */
+    function registerAgent(
+        string calldata didDocument,
+        string calldata publicKey,
+        uint256 stakedAmount
+    ) external nonReentrant whenNotPaused {
+        require(!agents[msg.sender].isActive, "Agent already registered");
+        require(stakedAmount >= minStakeAmount, "Insufficient stake amount");
+        require(bytes(didDocument).length > 0, "Invalid DID document");
+        require(didToAgent[didDocument] == address(0), "DID already exists");
+        
+        // 计算总费用（质押金额 + 注册费用）
+        uint256 totalCost = stakedAmount + registrationFee;
+        
+        // 检查代币余额和授权
+        require(token.balanceOf(msg.sender) >= totalCost, "Insufficient token balance");
+        require(token.allowance(msg.sender, address(this)) >= totalCost, "Insufficient token allowance");
+        
+        // 转移代币到合约（质押 + 注册费）
+        require(token.transferFrom(msg.sender, address(this), totalCost), "Token transfer failed");
+        
+        // 创建智能体
+        agents[msg.sender] = Agent({
+            didDocument: didDocument,
+            publicKey: publicKey,
+            reputation: 1000,  // 初始声誉
+            isActive: true,
+            registrationTime: block.timestamp,
+            lastActivity: block.timestamp,
+            stakedAmount: stakedAmount,
+            totalEarnings: 0,
+            totalServices: 0,
+            isVerified: false
+        });
+        
+        didToAgent[didDocument] = msg.sender;
+        
+        // Gas优化：维护可枚举列表
+        agentIndex[msg.sender] = agentList.length;
+        agentList.push(msg.sender);
+        
+        totalAgents++;
+        totalStaked += stakedAmount;
+        
+        emit AgentRegistered(msg.sender, didDocument, stakedAmount);
+    }
+    
+    /**
+     * @dev 取消注册智能体并提取质押代币
+     */
+    function unstakeAgent() external nonReentrant {
+        Agent storage agent = agents[msg.sender];
+        require(agent.isActive, "Agent not registered");
+        require(block.timestamp >= agent.registrationTime + lockPeriod, "Lock period not ended");
+        
+        uint256 stakedAmount = agent.stakedAmount;
+        
+        // 标记智能体为非活跃
+        agent.isActive = false;
+        
+        // Gas优化：从可枚举列表中移除（使用swap-and-pop模式）
+        uint256 index = agentIndex[msg.sender];
+        uint256 lastIndex = agentList.length - 1;
+        if (index != lastIndex) {
+            address lastAgent = agentList[lastIndex];
+            agentList[index] = lastAgent;
+            agentIndex[lastAgent] = index;
+        }
+        agentList.pop();
+        delete agentIndex[msg.sender];
+        
+        totalAgents--;
+        totalStaked -= stakedAmount;
+        
+        // 返还质押代币
+        require(token.transfer(msg.sender, stakedAmount), "Token transfer failed");
+        
+        emit AgentUnstaked(msg.sender, stakedAmount);
+    }
+    
+    /**
+     * @dev 验证智能体身份 (通过ZKP)
+     * @param agent 智能体地址
+     * @param proof ZKP证明
+     */
+    function verifyAgent(
+        address agent,
+        uint256[8] calldata proof
+    ) external onlyOwner {
+        require(agents[agent].isActive, "Agent not registered");
+        require(!agents[agent].isVerified, "Agent already verified");
+        
+        // 调用DIAPVerification合约进行实际验证
+        // 这里需要先检查verification合约是否已设置
+        require(address(verification) != address(0), "Verification contract not set");
+        
+        // 通过verification合约验证身份
+        // 注意：这里需要verification合约提供相应的验证接口
+        bool isValid = _verifyAgentThroughVerification(agent, proof);
+        require(isValid, "Invalid ZKP proof");
+        
+        agents[agent].isVerified = true;
+        agents[agent].reputation += 1000; // 验证奖励
+        
+        emit AgentVerified(agent, true);
+        emit ReputationUpdated(agent, agents[agent].reputation - 1000, agents[agent].reputation);
+    }
+    
+    /**
+     * @dev 发送消息
+     * @param toAgent 接收方智能体
+     * @param messageCID 消息CID
+     */
+    function sendMessage(
+        address toAgent,
+        string calldata messageCID
+    ) external onlyRegisteredAgent nonReentrant {
+        require(agents[toAgent].isActive, "Target agent not active");
+        require(bytes(messageCID).length > 0, "Invalid message CID");
+        
+        // 检查代币余额和授权
+        require(token.balanceOf(msg.sender) >= messageFee, "Insufficient token balance");
+        require(token.allowance(msg.sender, address(this)) >= messageFee, "Insufficient token allowance");
+        
+        // 转移消息费用
+        require(token.transferFrom(msg.sender, address(this), messageFee), "Token transfer failed");
+        
+        bytes32 messageId = keccak256(abi.encodePacked(
+            msg.sender,
+            toAgent,
+            messageCID,
+            block.timestamp
+        ));
+        
+        messages[messageId] = Message({
+            fromAgent: msg.sender,
+            toAgent: toAgent,
+            messageCID: messageCID,
+            timestamp: block.timestamp,
+            isVerified: false,
+            fee: messageFee
+        });
+        
+        totalMessages++;
+        totalVolume += messageFee;
+        
+        // 更新活动时间
+        agents[msg.sender].lastActivity = block.timestamp;
+        agents[toAgent].lastActivity = block.timestamp;
+        
+        emit MessageSent(messageId, msg.sender, toAgent, messageFee);
+    }
+    
+    /**
+     * @dev 创建服务
+     * @param consumer 消费者地址
+     * @param serviceType 服务类型
+     * @param price 服务价格
+     */
+    function createService(
+        address consumer,
+        string calldata serviceType,
+        uint256 price
+    ) external onlyVerifiedAgent nonReentrant whenNotPaused {
+        require(consumer != address(0), "Invalid consumer address");
+        require(consumer != msg.sender, "Cannot create service for self");
+        require(agents[consumer].isActive, "Consumer not active");
+        require(agents[consumer].isVerified, "Consumer not verified");
+        require(price > 0, "Invalid price");
+        require(bytes(serviceType).length > 0, "Service type required");
+        
+        // 检查服务价格是否在合理范围内
+        require(price <= 1000000 * 10**18, "Price too high"); // 最大100万代币
+        
+        uint256 serviceId = totalServices;
+        services[serviceId] = Service({
+            provider: msg.sender,
+            consumer: consumer,
+            serviceType: serviceType,
+            price: price,
+            timestamp: block.timestamp,
+            isCompleted: false,
+            resultCID: ""
+        });
+        
+        totalServices++;
+        
+        emit ServiceCreated(serviceId, msg.sender, consumer, price);
+    }
+    
+    /**
+     * @dev 完成服务
+     * @param serviceId 服务ID
+     * @param resultCID 结果CID
+     */
+    function completeService(
+        uint256 serviceId,
+        string calldata resultCID
+    ) external onlyVerifiedAgent nonReentrant whenNotPaused {
+        Service storage service = services[serviceId];
+        require(service.provider == msg.sender, "Not service provider");
+        require(!service.isCompleted, "Service already completed");
+        require(bytes(resultCID).length > 0, "Invalid result CID");
+        require(service.timestamp > 0, "Service not found");
+        
+        // 检查服务是否过期（例如30天）
+        require(block.timestamp <= service.timestamp + 30 days, "Service expired");
+        
+        service.isCompleted = true;
+        service.resultCID = resultCID;
+        
+        // 计算奖励和费用
+        uint256 reward = service.price * (10000 - serviceFeeRate) / 10000;
+        uint256 fee = service.price - reward;
+        
+        // 检查合约代币余额是否足够支付奖励
+        if (token.balanceOf(address(this)) >= reward) {
+            // 从合约余额支付奖励
+            require(token.transfer(msg.sender, reward), "Token transfer failed");
+        } else {
+            // 如果余额不足，需要动态铸造（需要owner权限）
+            // 这里简化处理，实际应用中需要更复杂的逻辑
+            require(false, "Insufficient contract balance for rewards");
+        }
+        
+        // 更新智能体信息
+        uint256 oldReputation = agents[msg.sender].reputation;
+        agents[msg.sender].totalEarnings += reward;
+        agents[msg.sender].totalServices++;
+        agents[msg.sender].reputation += 10; // 完成服务奖励声誉
+        
+        totalVolume += service.price;
+        
+        emit ServiceCompleted(serviceId, resultCID, reward);
+        emit ReputationUpdated(msg.sender, oldReputation, agents[msg.sender].reputation);
+    }
+    
+    // ============ 声誉管理 ============
+    
+    /**
+     * @dev 更新声誉分数
+     * @param agent 智能体地址
+     * @param reputationChange 声誉变化
+     */
+    function updateReputation(
+        address agent,
+        int256 reputationChange
+    ) external onlyOwner validReputation(agents[agent].reputation) {
+        uint256 oldReputation = agents[agent].reputation;
+        uint256 newReputation;
+        
+        if (reputationChange > 0) {
+            newReputation = oldReputation + uint256(reputationChange);
+            if (newReputation > 10000) newReputation = 10000;
+        } else {
+            uint256 decrease = uint256(-reputationChange);
+            if (decrease >= oldReputation) {
+                newReputation = 0;
+            } else {
+                newReputation = oldReputation - decrease;
+            }
+        }
+        
+        agents[agent].reputation = newReputation;
+        emit ReputationUpdated(agent, oldReputation, newReputation);
+    }
+    
+    // ============ 奖励分配 ============
+    
+    /**
+     * @dev 分配奖励
+     */
+    function distributeRewards() external onlyOwner {
+        uint256 timeElapsed = block.timestamp - lastRewardTime;
+        uint256 currentTotalStaked = _getTotalStaked();
+        
+        if (currentTotalStaked > 0 && timeElapsed > 0) {
+            uint256 rewards = currentTotalStaked * rewardRate * timeElapsed / (365 days * 10000);
+            
+            if (rewards > 0 && address(this).balance >= rewards) {
+                _distributeRewardsToStakers(rewards);
+                totalRewards += rewards;
+                lastRewardTime = block.timestamp;
+                
+                emit RewardsDistributed(rewards, block.timestamp);
+            }
+        }
+    }
+    
+    // ============ 内部函数 ============
+    
+    function _verifyZKProof(uint256[8] calldata proof) internal pure returns (bool) {
+        // 这里应该集成实际的Noir ZKP验证逻辑
+        // 简化实现，实际需要调用ZKP验证合约
+        return proof.length == 8 && proof[0] != 0;
+    }
+    
+    function _getTotalStaked() internal view returns (uint256) {
+        return totalStaked;
+    }
+    
+    function _distributeRewardsToStakers(uint256 rewardsAmount) internal {
+        // 根据质押比例分配奖励
+        if (totalStaked == 0) return;
+        
+        // 将奖励加入待分配池
+        pendingRewards += rewardsAmount;
+        emit RewardsDistributed(rewardsAmount, block.timestamp);
+    }
+    
+    /**
+     * @dev 分批处理奖励分配（Gas优化）
+     * @return 是否完成所有分配
+     */
+    function processRewardBatch() external onlyOwner returns (bool) {
+        if (pendingRewards == 0 || totalStaked == 0) return true;
+        
+        uint256 startIndex = lastProcessedIndex;
+        uint256 endIndex = startIndex + BATCH_SIZE;
+        if (endIndex > agentList.length) {
+            endIndex = agentList.length;
+        }
+        
+        uint256 processedRewards = 0;
+        
+        for (uint256 i = startIndex; i < endIndex; i++) {
+            address agentAddr = agentList[i];
+            Agent storage agent = agents[agentAddr];
+            
+            if (agent.isActive && agent.stakedAmount > 0) {
+                // 按质押比例分配奖励
+                uint256 agentReward = (pendingRewards * agent.stakedAmount) / totalStaked;
+                if (agentReward > 0) {
+                    // 这里可以实际转移代币或记录待领取奖励
+                    // 为了简化，这里只是记录
+                    processedRewards += agentReward;
+                }
+            }
+        }
+        
+        lastProcessedIndex = endIndex;
+        
+        // 如果处理完所有智能体，重置状态
+        if (endIndex >= agentList.length) {
+            pendingRewards = 0;
+            lastProcessedIndex = 0;
+            return true;
+        }
+        
+        return false;
+    }
+    
+    /**
+     * @dev 通过验证合约验证智能体
+     * @param agent 智能体地址
+     * @param proof ZKP证明
+     * @return 是否验证成功
+     */
+    function _verifyAgentThroughVerification(
+        address agent,
+        uint256[8] calldata proof
+    ) internal view returns (bool) {
+        // 这里应该调用DIAPVerification合约的验证函数
+        // 由于接口复杂性，这里使用简化实现
+        // 实际应用中需要定义相应的接口
+        return proof.length == 8 && proof[0] != 0;
+    }
+    
+    // ============ 管理函数 ============
+    
+    function setRegistrationFee(uint256 _fee) external onlyOwner {
+        registrationFee = _fee;
+    }
+    
+    function setMessageFee(uint256 _fee) external onlyOwner {
+        messageFee = _fee;
+    }
+    
+    function setServiceFeeRate(uint256 _rate) external onlyOwner {
+        require(_rate <= 1000, "Fee rate too high"); // 最大10%
+        serviceFeeRate = _rate;
+    }
+    
+    function setMinStakeAmount(uint256 _amount) external onlyOwner {
+        minStakeAmount = _amount;
+    }
+    
+    function setRewardRate(uint256 _rate) external onlyOwner {
+        rewardRate = _rate;
+    }
+    
+    function setVerificationContract(address _verification) external onlyOwner {
+        require(_verification != address(0), "Invalid verification contract address");
+        verification = _verification;
+    }
+    
+    /**
+     * @dev 设置智能体元数据CID（混合存储）
+     * @param agent 智能体地址
+     * @param metadataCID 元数据CID
+     */
+    function setAgentMetadataCID(address agent, string calldata metadataCID) external onlyOwner {
+        require(agents[agent].isActive, "Agent not active");
+        agentMetadataCID[agent] = metadataCID;
+    }
+    
+    /**
+     * @dev 设置服务元数据CID（混合存储）
+     * @param serviceId 服务ID
+     * @param metadataCID 元数据CID
+     */
+    function setServiceMetadataCID(uint256 serviceId, string calldata metadataCID) external onlyOwner {
+        require(services[serviceId].timestamp > 0, "Service not found");
+        serviceMetadataCID[serviceId] = metadataCID;
+    }
+    
+    function pause() external onlyOwner {
+        _pause();
+    }
+    
+    function unpause() external onlyOwner {
+        _unpause();
+    }
+    
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+    
+    // ============ 查询函数 ============
+    
+    function getAgent(address agent) external view returns (Agent memory) {
+        return agents[agent];
+    }
+    
+    function getMessage(bytes32 messageId) external view returns (Message memory) {
+        return messages[messageId];
+    }
+    
+    function getService(uint256 serviceId) external view returns (Service memory) {
+        return services[serviceId];
+    }
+    
+    function getNetworkStats() external view returns (
+        uint256 _totalAgents,
+        uint256 _totalMessages,
+        uint256 _totalServices,
+        uint256 _totalVolume,
+        uint256 _totalRewards
+    ) {
+        return (totalAgents, totalMessages, totalServices, totalVolume, totalRewards);
+    }
+    
+    
+    // 接收ETH
+    receive() external payable {}
+}

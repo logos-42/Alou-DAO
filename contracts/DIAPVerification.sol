@@ -205,6 +205,9 @@ contract DIAPVerification is
         require(nullifier != bytes32(0), "Invalid nullifier");
         require(!usedNullifiers[nullifier], "Nullifier already used"); // 防止重放攻击
         
+        // 立即标记nullifier为已使用，防止重放攻击
+        usedNullifiers[nullifier] = true;
+        
         // 检查验证尝试次数
         require(failedAttempts[msg.sender] < maxVerificationAttempts, "Too many failed attempts");
         
@@ -259,8 +262,7 @@ contract DIAPVerification is
             session.isValid = true;
             totalSuccessfulVerifications++;
             
-            // 使用会话中保存的nullifier
-            usedNullifiers[session.nullifier] = true;
+            // nullifier已经在initiateIdentityVerification中被标记为已使用，无需重复标记
             
             // 保存身份证明，使用会话中的commitment和nullifier
             identityProofs[session.agent] = IdentityProof({

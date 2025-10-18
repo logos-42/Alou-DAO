@@ -487,8 +487,8 @@
       ]
     },
     "D:\\Smart ETH\\contracts\\DIAPVerification.sol": {
-      "lastModificationDate": 1760796032805,
-      "contentHash": "91754e260c34ba65167a335d46596e83",
+      "lastModificationDate": 1760797561514,
+      "contentHash": "3948cae4f656d0bd975b7f3c1527c43d",
       "sourceName": "contracts/DIAPVerification.sol",
       "solcConfig": {
         "version": "0.8.19",

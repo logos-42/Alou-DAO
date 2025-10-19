@@ -145,8 +145,8 @@ contract DIAPToken is
     
     // ============ 初始化函数 ============
     
-    function initialize() public initializer {
-        __ERC20_init("DIAP Token", "DIAP");
+    function initialize(string calldata tokenName, string calldata tokenSymbol) public initializer {
+        __ERC20_init(tokenName, tokenSymbol);
         __ERC20Burnable_init();
         __ERC20Pausable_init();
         __Ownable_init();

@@ -3,10 +3,18 @@ const { ethers } = require("hardhat");
 async function main() {
     console.log("=== DIAP智能体网络完整部署开始 ===");
     
+    // 代币配置
+    const TOKEN_NAME = "DIAP Alou Token";
+    const TOKEN_SYMBOL = "DAT";
+    const TOKEN_ICON_IPFS = "bafkreifetmic46qx5ydzsefucehjn4vw2hi4koehgb4pxeo4zr4gnftvyu";
+    const TOKEN_DESCRIPTION = "去中心化智能体网络代币 - DIAP Alou Token";
+    
     // 获取部署者账户
     const [deployer] = await ethers.getSigners();
     console.log("部署者地址:", deployer.address);
     console.log("部署者余额:", ethers.utils.formatEther(await deployer.getBalance()), "ETH");
+    console.log("代币名称:", TOKEN_NAME);
+    console.log("代币符号:", TOKEN_SYMBOL);
     
     // 1. 部署DIAPToken
     console.log("\n1. 部署DIAPToken...");
@@ -17,7 +25,7 @@ async function main() {
     
     // 初始化DIAPToken
     console.log("\n1.1 初始化DIAPToken...");
-    await token.initialize();
+    await token.initialize(TOKEN_NAME, TOKEN_SYMBOL);
     console.log("DIAPToken初始化完成");
     
     // 2. 部署DIAPAgentNetwork
@@ -114,7 +122,9 @@ async function main() {
                     address: token.address,
                     name: tokenName,
                     symbol: tokenSymbol,
-                    totalSupply: tokenSupply.toString()
+                    totalSupply: tokenSupply.toString(),
+                    icon: `https://ipfs.io/ipfs/${TOKEN_ICON_IPFS}`,
+                    description: TOKEN_DESCRIPTION
                 },
                 DIAPAgentNetwork: {
                     address: agentNetwork.address,

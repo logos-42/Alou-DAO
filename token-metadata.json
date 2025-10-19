@@ -1,0 +1,197 @@
+{
+  "name": "DIAP Alou Token",
+  "symbol": "DAT",
+  "description": "去中心化智能体网络代币 - DIAP Alou Token，为AI智能体生态系统提供动力",
+  "image": "https://ipfs.io/ipfs/bafkreifetmic46qx5ydzsefucehjn4vw2hi4koehgb4pxeo4zr4gnftvyu",
+  "decimals": 18,
+  "website": "https://diap.network",
+  "social": {
+    "twitter": "https://x.com/canopylist",
+    "github": "https://github.com/logos-42/Alou-DAO",
+    "discord": "https://discord.gg/EYqPzuzrdw"
+  },
+  "totalSupply": "100000000000000000000000000",
+  "maxSupply": "1000000000000000000000000000",
+  "initialSupply": "100000000000000000000000000",
+  "circulatingSupply": "100000000000000000000000000",
+  "mintable": false,
+  "burnable": true,
+  "pausable": true,
+  "upgradeable": true,
+  "economics": {
+    "tokenomics": {
+      "community": "40%",
+      "team": "20%",
+      "treasury": "15%",
+      "staking": "15%",
+      "liquidity": "10%"
+    },
+    "vesting": {
+      "team": "24 months",
+      "community": "immediate",
+      "treasury": "12 months"
+    },
+    "staking": {
+      "enabled": true,
+      "minStake": "1000",
+      "maxStake": "unlimited",
+      "rewards": "1%-10% APY",
+      "tiers": {
+        "bronze": {
+          "minAmount": "1000 DAT",
+          "multiplier": "1x",
+          "lockPeriod": "30 days"
+        },
+        "silver": {
+          "minAmount": "10000 DAT",
+          "multiplier": "1.5x",
+          "lockPeriod": "90 days"
+        },
+        "gold": {
+          "minAmount": "50000 DAT",
+          "multiplier": "2x",
+          "lockPeriod": "180 days"
+        },
+        "platinum": {
+          "minAmount": "100000 DAT",
+          "multiplier": "3x",
+          "lockPeriod": "365 days"
+        }
+      }
+    },
+    "burnMechanism": {
+      "autoBurnRate": "0.25%",
+      "manualBurn": true,
+      "totalBurned": "0"
+    }
+  },
+  "technical": {
+    "standard": "ERC-20",
+    "blockchain": "Ethereum",
+    "network": "Mainnet",
+    "compiler": "Solidity 0.8.30",
+    "license": "MIT",
+    "verified": false,
+    "audited": false,
+    "auditReports": [],
+    "sourceCode": "https://github.com/diap-network/contracts"
+  },
+  "governance": {
+    "type": "DAO",
+    "votingPower": "token-based + reputation",
+    "proposalThreshold": "1000 DAT",
+    "quorum": "4%",
+    "votingPeriod": "3 days",
+    "executionDelay": "1 day",
+    "governanceContract": "0x8A791620dd6260079BF849Dc5567aDC3F2FdC318",
+    "timelockContract": "0x2279B7A0a67DB372996a5FaB50D91eAA73d2eBe6"
+  },
+  "useCases": [
+    "Agent Registration",
+    "Service Payments",
+    "Governance Voting",
+    "Staking Rewards",
+    "Network Fees",
+    "Reputation System",
+    "Cross-chain Payments",
+    "Privacy Payments",
+    "Payment Channels"
+  ],
+  "ecosystem": {
+    "agentNetwork": "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
+    "paymentSystem": "0x0165878A594ca255338adfa4d48449f69242Eb8F",
+    "verificationSystem": "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9",
+    "governanceSystem": "0x8A791620dd6260079BF849Dc5567aDC3F2FdC318",
+    "timelockController": "0x2279B7A0a67DB372996a5FaB50D91eAA73d2eBe6"
+  },
+  "features": {
+    "upgradeable": true,
+    "pausable": true,
+    "burnable": true,
+    "staking": true,
+    "governance": true,
+    "crossChain": true,
+    "privacy": true,
+    "paymentChannels": true,
+    "zkpVerification": true,
+    "reputationSystem": true
+  },
+  "compliance": {
+    "jurisdiction": "Switzerland",
+    "regulatoryStatus": "Utility Token",
+    "kycRequired": false,
+    "amlCompliant": true,
+    "taxStatus": "Subject to local tax laws",
+    "legalOpinion": "https://diap.network/legal-opinion.pdf"
+  },
+  "roadmap": {
+    "phase1": {
+      "name": "Foundation",
+      "status": "completed",
+      "date": "2024-Q4",
+      "milestones": ["Token Launch", "Agent Network Beta", "Basic Governance"]
+    },
+    "phase2": {
+      "name": "Expansion",
+      "status": "in-progress",
+      "date": "2025-Q1",
+      "milestones": ["Mainnet Launch", "Governance Activation", "Payment System"]
+    },
+    "phase3": {
+      "name": "Advanced Features",
+      "status": "planned",
+      "date": "2025-Q2",
+      "milestones": ["Cross-chain Integration", "Privacy Features", "Advanced Staking"]
+    }
+  },
+  "attributes": [
+    {
+      "trait_type": "Network",
+      "value": "DIAP Agent Network"
+    },
+    {
+      "trait_type": "Type",
+      "value": "Governance Token"
+    },
+    {
+      "trait_type": "Standard",
+      "value": "ERC-20"
+    },
+    {
+      "trait_type": "Blockchain",
+      "value": "Ethereum"
+    },
+    {
+      "trait_type": "Total Supply",
+      "value": "100,000,000"
+    },
+    {
+      "trait_type": "Max Supply",
+      "value": "1,000,000,000"
+    },
+    {
+      "trait_type": "Use Case",
+      "value": "Agent Staking, Governance, Payments"
+    },
+    {
+      "trait_type": "Staking Tiers",
+      "value": "4"
+    },
+    {
+      "trait_type": "Burn Rate",
+      "value": "0.25%"
+    },
+    {
+      "trait_type": "Governance",
+      "value": "DAO"
+    }
+  ],
+  "contract": {
+    "address": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+    "network": "hardhat",
+    "deployed_at": "2025-10-19T04:01:06.760Z",
+    "proxy": true,
+    "implementation": "0x0000000000000000000000000000000000000000",
+    "deployer": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
+  }
+}

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.30;
 
+
 import "@openzeppelin/contracts/governance/Governor.sol";
 import "@openzeppelin/contracts/governance/extensions/GovernorVotes.sol";
 import "@openzeppelin/contracts/governance/extensions/GovernorVotesQuorumFraction.sol";
@@ -65,14 +66,14 @@ contract DIAPGovernance is
     
     // ============ 事件定义 ============
     
-    event ProposalCreated(
+    event DIAPProposalCreated(
         uint256 indexed proposalId,
         ProposalType indexed proposalType,
         address indexed proposer,
         string description
     );
     
-    event ProposalExecuted(
+    event DIAPProposalExecuted(
         uint256 indexed proposalId,
         ProposalType indexed proposalType
     );
@@ -133,7 +134,7 @@ contract DIAPGovernance is
         uint256 proposalId = propose(targets, values, calldatas, description);
         proposalTypes[proposalId] = ProposalType.NETWORK_UPGRADE;
         
-        emit ProposalCreated(proposalId, ProposalType.NETWORK_UPGRADE, msg.sender, description);
+        emit DIAPProposalCreated(proposalId, ProposalType.NETWORK_UPGRADE, msg.sender, description);
         return proposalId;
     }
     
@@ -155,7 +156,7 @@ contract DIAPGovernance is
         uint256 proposalId = propose(targets, values, calldatas, description);
         proposalTypes[proposalId] = ProposalType.PARAMETER_CHANGE;
         
-        emit ProposalCreated(proposalId, ProposalType.PARAMETER_CHANGE, msg.sender, description);
+        emit DIAPProposalCreated(proposalId, ProposalType.PARAMETER_CHANGE, msg.sender, description);
         return proposalId;
     }
     
@@ -177,7 +178,7 @@ contract DIAPGovernance is
         uint256 proposalId = propose(targets, values, calldatas, description);
         proposalTypes[proposalId] = ProposalType.TREASURY_MANAGEMENT;
         
-        emit ProposalCreated(proposalId, ProposalType.TREASURY_MANAGEMENT, msg.sender, description);
+        emit DIAPProposalCreated(proposalId, ProposalType.TREASURY_MANAGEMENT, msg.sender, description);
         return proposalId;
     }
     
@@ -199,7 +200,7 @@ contract DIAPGovernance is
         uint256 proposalId = propose(targets, values, calldatas, description);
         proposalTypes[proposalId] = ProposalType.AGENT_POLICY;
         
-        emit ProposalCreated(proposalId, ProposalType.AGENT_POLICY, msg.sender, description);
+        emit DIAPProposalCreated(proposalId, ProposalType.AGENT_POLICY, msg.sender, description);
         return proposalId;
     }
     
@@ -221,7 +222,7 @@ contract DIAPGovernance is
         uint256 proposalId = propose(targets, values, calldatas, description);
         proposalTypes[proposalId] = ProposalType.TOKEN_ECONOMICS;
         
-        emit ProposalCreated(proposalId, ProposalType.TOKEN_ECONOMICS, msg.sender, description);
+        emit DIAPProposalCreated(proposalId, ProposalType.TOKEN_ECONOMICS, msg.sender, description);
         return proposalId;
     }
     
@@ -243,7 +244,7 @@ contract DIAPGovernance is
         uint256 proposalId = propose(targets, values, calldatas, description);
         proposalTypes[proposalId] = ProposalType.EMERGENCY_ACTION;
         
-        emit ProposalCreated(proposalId, ProposalType.EMERGENCY_ACTION, msg.sender, description);
+        emit DIAPProposalCreated(proposalId, ProposalType.EMERGENCY_ACTION, msg.sender, description);
         return proposalId;
     }
     
@@ -302,7 +303,7 @@ contract DIAPGovernance is
         
         // 发出提案执行事件
         ProposalType proposalType = proposalTypes[proposalId];
-        emit ProposalExecuted(proposalId, proposalType);
+        emit DIAPProposalExecuted(proposalId, proposalType);
         
         return proposalId;
     }

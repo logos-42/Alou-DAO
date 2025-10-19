@@ -826,8 +826,8 @@
       ]
     },
     "D:\\Smart ETH\\contracts\\DIAPGovernance.sol": {
-      "lastModificationDate": 1760843398184,
-      "contentHash": "e4373147fa0618685b2535f5031d7529",
+      "lastModificationDate": 1760844490827,
+      "contentHash": "522c72472689476e6024a318e16dca8a",
       "sourceName": "contracts/DIAPGovernance.sol",
       "solcConfig": {
         "version": "0.8.30",

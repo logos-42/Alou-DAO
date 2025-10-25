@@ -7,8 +7,9 @@ module.exports = {
     settings: {
       optimizer: {
         enabled: true,
-        runs: 200
-      }
+        runs: 10  // 极低runs值以最小化合约大小
+      },
+      viaIR: false  // 禁用IR优化以减小合约大小
     }
   },
   networks: {

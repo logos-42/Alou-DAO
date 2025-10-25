@@ -422,6 +422,15 @@ contract DIAPVerification is
         emit AgentWhitelisted(agent, block.timestamp);
     }
     
+    /**
+     * @dev 重置nullifier（申诉成功后）
+     * @param nullifier 要重置的nullifier
+     */
+    function resetNullifier(bytes32 nullifier) external onlyOwner {
+        require(usedNullifiers[nullifier], "Nullifier not used");
+        usedNullifiers[nullifier] = false;
+    }
+    
     // ============ 内部函数 ============
     
     /**

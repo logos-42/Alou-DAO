@@ -1,2 +1,74 @@
-node_modules
-node_modules
+# Dependencies
+node_modules/
+
+# Hardhat files
+cache/
+artifacts/
+typechain-types/
+
+# Coverage reports
+coverage/
+coverage.json
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+.kiro/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build outputs
+dist/
+build/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Hardhat Ignition default folder for deployments against a local node
+ignition/deployments/chain-31337
+
+# Test outputs
+test-results/
+*.test.js.snap
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Gas reports
+gas-report.txt
+
+# Flattened contracts
+flattened/
+
+# Remix IDE files
+.remix/
+.deps/
+.states/
+
+# Swarm storage
+swarm/
+
+# Git merge files
+*.MERGE_MSG.swp
+MERGE_MSG
+
+ Documentation (optional - uncomment if you want to ignore)
+ DIAP_README.md
+
+ TOKEN_METADATA_SUMMARY.md
+ ARCHITECTURE.md

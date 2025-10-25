@@ -97,6 +97,10 @@ contract DIAPAgentNetwork is
     mapping(address => string) public agentMetadataCID; // 智能体详细元数据CID（链下）
     mapping(uint256 => string) public serviceMetadataCID; // 服务详细元数据CID（链下）
     
+    // 费用分配
+    uint256 public accumulatedFees;  // 累积的注册费和消息费
+    address public treasuryAddress;  // 金库地址
+    
     // ============ 事件定义 ============
     
     event AgentRegistered(
@@ -144,6 +148,17 @@ contract DIAPAgentNetwork is
     event RewardsDistributed(
         uint256 totalAmount, 
         uint256 timestamp
+    );
+    
+    event FeesWithdrawn(
+        address indexed to,
+        uint256 amount,
+        uint256 timestamp
+    );
+    
+    event TreasuryAddressUpdated(
+        address indexed oldAddress,
+        address indexed newAddress
     );
     
     // ============ 修饰符 ============
@@ -215,6 +230,9 @@ contract DIAPAgentNetwork is
         
         // 转移代币到合约（质押 + 注册费）
         require(token.transferFrom(msg.sender, address(this), totalCost), "Token transfer failed");
+        
+        // 累积注册费
+        accumulatedFees += registrationFee;
         
         // 创建智能体
         agents[msg.sender] = Agent({
@@ -322,6 +340,9 @@ contract DIAPAgentNetwork is
         // 转移消息费用
         require(token.transferFrom(msg.sender, address(this), messageFee), "Token transfer failed");
         
+        // 累积消息费
+        accumulatedFees += messageFee;
+        
         bytes32 messageId = keccak256(abi.encodePacked(
             msg.sender,
             toAgent,
@@ -408,7 +429,7 @@ contract DIAPAgentNetwork is
         
         // 计算奖励和费用
         uint256 reward = service.price * (10000 - serviceFeeRate) / 10000;
-        uint256 fee = service.price - reward;
+        // uint256 fee = service.price - reward; // 费用留在合约中
         
         // 检查合约代币余额是否足够支付奖励
         if (token.balanceOf(address(this)) >= reward) {
@@ -465,7 +486,7 @@ contract DIAPAgentNetwork is
     // ============ 奖励分配 ============
     
     /**
-     * @dev 分配奖励
+     * @dev 分配奖励（使用代币而非ETH）
      */
     function distributeRewards() external onlyOwner {
         uint256 timeElapsed = block.timestamp - lastRewardTime;
@@ -474,7 +495,8 @@ contract DIAPAgentNetwork is
         if (currentTotalStaked > 0 && timeElapsed > 0) {
             uint256 rewards = currentTotalStaked * rewardRate * timeElapsed / (365 days * 10000);
             
-            if (rewards > 0 && address(this).balance >= rewards) {
+            // 检查合约代币余额是否足够
+            if (rewards > 0 && token.balanceOf(address(this)) >= rewards + currentTotalStaked) {
                 _distributeRewardsToStakers(rewards);
                 totalRewards += rewards;
                 lastRewardTime = block.timestamp;
@@ -549,14 +571,13 @@ contract DIAPAgentNetwork is
     
     /**
      * @dev 通过验证合约验证智能体
-     * @param agent 智能体地址
      * @param proof ZKP证明
      * @return 是否验证成功
      */
     function _verifyAgentThroughVerification(
-        address agent,
+        address /* agent */,
         uint256[8] calldata proof
-    ) internal view returns (bool) {
+    ) internal pure returns (bool) {
         // 这里应该调用DIAPVerification合约的验证函数
         // 由于接口复杂性，这里使用简化实现
         // 实际应用中需要定义相应的接口
@@ -589,6 +610,32 @@ contract DIAPAgentNetwork is
     function setVerificationContract(address _verification) external onlyOwner {
         require(_verification != address(0), "Invalid verification contract address");
         verification = _verification;
+    }
+    
+    /**
+     * @dev 设置金库地址
+     * @param _treasury 金库地址
+     */
+    function setTreasuryAddress(address _treasury) external onlyOwner {
+        require(_treasury != address(0), "Invalid treasury address");
+        address oldTreasury = treasuryAddress;
+        treasuryAddress = _treasury;
+        emit TreasuryAddressUpdated(oldTreasury, _treasury);
+    }
+    
+    /**
+     * @dev 提取累积的费用到金库
+     */
+    function withdrawFees() external onlyOwner nonReentrant {
+        require(treasuryAddress != address(0), "Treasury address not set");
+        require(accumulatedFees > 0, "No fees to withdraw");
+        
+        uint256 amount = accumulatedFees;
+        accumulatedFees = 0;
+        
+        require(token.transfer(treasuryAddress, amount), "Token transfer failed");
+        
+        emit FeesWithdrawn(treasuryAddress, amount, block.timestamp);
     }
     
     /**

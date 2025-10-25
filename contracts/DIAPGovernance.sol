@@ -266,13 +266,41 @@ contract DIAPGovernance is
         uint256 reputationVotes = 0;
         try agentNetwork.getAgent(account) returns (DIAPAgentNetwork.Agent memory agent) {
             if (agent.isActive && agent.isVerified) {
-                reputationVotes = agent.reputation * 10**15; // 声誉转换为投票权重
+                // 使用平方根转换防止巨鲸控制，并添加溢出保护
+                uint256 reputation = agent.reputation;
+                if (reputation > 0) {
+                    // reputation最大10000，sqrt(10000) = 100
+                    // 乘以10**15确保有足够的精度，但不会溢出
+                    uint256 sqrtReputation = _sqrt(reputation);
+                    // 限制最大声誉投票权重，防止溢出
+                    reputationVotes = sqrtReputation * 10**15;
+                    // 确保不会溢出
+                    require(reputationVotes / 10**15 == sqrtReputation, "Reputation votes overflow");
+                }
             }
         } catch {
             // 如果智能体网络不可用，只使用代币投票
         }
         
+        // 检查总和不会溢出
+        require(tokenVotes <= type(uint256).max - reputationVotes, "Total votes overflow");
+        
         return tokenVotes + reputationVotes;
+    }
+    
+    /**
+     * @dev 计算平方根（Babylonian方法）
+     * @param x 输入值
+     * @return y 平方根
+     */
+    function _sqrt(uint256 x) internal pure returns (uint256 y) {
+        if (x == 0) return 0;
+        uint256 z = (x + 1) / 2;
+        y = x;
+        while (z < y) {
+            y = z;
+            z = (x / z + z) / 2;
+        }
     }
     
     /**
@@ -375,9 +403,8 @@ contract DIAPGovernance is
     
     /**
      * @dev 检查升级权限（多签控制）
-     * @param newImplementation 新实现地址
      */
-    function _authorizeUpgrade(address newImplementation) internal {
+    function _authorizeUpgrade(address /* newImplementation */) internal view {
         require(
             upgradeAuthorizers[msg.sender] || 
             msg.sender == multisigWallet || 
@@ -431,7 +458,7 @@ contract DIAPGovernance is
      * @return activeProposals 活跃提案数
      * @return executedProposals 已执行提案数
      */
-    function getGovernanceStats() external view returns (
+    function getGovernanceStats() external pure returns (
         uint256 totalProposals,
         uint256 activeProposals,
         uint256 executedProposals

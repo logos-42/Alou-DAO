@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
-const { expect } = require("chai");
-const { ethers } = require("hardhat");
+import { expect } from "chai";
+import hre from "hardhat";
+const { ethers } = hre;
 
 describe("DIAPToken", function () {
     let token;
@@ -10,11 +11,11 @@ describe("DIAPToken", function () {
 
     beforeEach(async function () {
         [owner, user1, user2] = await ethers.getSigners();
-        
+
         const DIAPToken = await ethers.getContractFactory("DIAPToken");
         token = await DIAPToken.deploy();
-        await token.initialize();
-        
+        await token.initialize("DIAP Token", "DIAP");
+
         // 给用户分配一些代币用于测试
         const userBalance = ethers.utils.parseEther("100000"); // 10万代币
         await token.transfer(user1.address, userBalance);
@@ -40,9 +41,9 @@ describe("DIAPToken", function () {
     describe("质押功能", function () {
         it("应该允许首次质押", async function () {
             const amount = ethers.utils.parseEther("1000"); // 青铜级最低要求
-            
+
             await token.connect(user1).stake(amount, 0); // 青铜级
-            
+
             const stakingInfo = await token.getStakingInfo(user1.address);
             expect(stakingInfo.amount).to.equal(amount);
             expect(stakingInfo.tier).to.equal(0); // 青铜级
@@ -50,7 +51,7 @@ describe("DIAPToken", function () {
 
         it("应该拒绝低于层级要求的质押", async function () {
             const amount = ethers.utils.parseEther("500"); // 低于青铜级要求
-            
+
             await expect(
                 token.connect(user1).stake(amount, 0)
             ).to.be.revertedWith("Amount below tier minimum");
@@ -59,22 +60,22 @@ describe("DIAPToken", function () {
         it("应该允许追加质押但不允许层级跳跃", async function () {
             const initialAmount = ethers.utils.parseEther("1000");
             const additionalAmount = ethers.utils.parseEther("1000"); // 增加到2000，仍然在青铜级范围内
-            
+
             // 首次质押
             await token.connect(user1).stake(initialAmount, 0);
-            
+
             // 追加质押应该成功
             await token.connect(user1).stake(additionalAmount, 0);
-            
+
             const stakingInfo = await token.getStakingInfo(user1.address);
             expect(stakingInfo.amount).to.equal(initialAmount.add(additionalAmount));
         });
 
         it("应该拒绝层级跳跃", async function () {
             const amount = ethers.utils.parseEther("1000"); // 青铜级
-            
+
             await token.connect(user1).stake(amount, 0);
-            
+
             // 尝试跳跃到白银级应该失败（需要足够的金额）
             const silverAmount = ethers.utils.parseEther("10000"); // 白银级最低要求
             await expect(
@@ -99,7 +100,7 @@ describe("DIAPToken", function () {
     describe("时间锁机制", function () {
         it("应该要求时间锁来调整奖励率", async function () {
             const newRate = 600; // 6%
-            
+
             // 直接调整应该失败
             await expect(
                 token.setStakingRewardRate(newRate)
@@ -108,7 +109,7 @@ describe("DIAPToken", function () {
 
         it("应该允许安排奖励率调整", async function () {
             const newRate = 600; // 6%
-            
+
             // 安排调整应该成功
             await expect(
                 token.scheduleRewardRateChange(newRate)
@@ -121,21 +122,21 @@ describe("DIAPToken", function () {
             await expect(
                 token.emergencyPause()
             ).to.emit(token, "EmergencyPaused");
-            
+
             expect(await token.emergencyPaused()).to.be.true;
         });
 
         it("应该允许取消紧急暂停", async function () {
             await token.emergencyPause();
             await token.emergencyUnpause();
-            
+
             expect(await token.emergencyPaused()).to.be.false;
         });
 
         it("应该拒绝在紧急暂停时的质押", async function () {
             await token.emergencyPause();
             const amount = ethers.utils.parseEther("1000");
-            
+
             await expect(
                 token.connect(user1).stake(amount, 0)
             ).to.be.revertedWith("Contract is emergency paused");
@@ -144,9 +145,9 @@ describe("DIAPToken", function () {
         it("应该允许紧急提取", async function () {
             const amount = ethers.utils.parseEther("1000");
             await token.connect(user1).stake(amount, 0);
-            
+
             await token.enableEmergencyWithdraw();
-            
+
             await expect(
                 token.connect(user1).emergencyWithdraw()
             ).to.emit(token, "EmergencyWithdraw");
@@ -157,21 +158,21 @@ describe("DIAPToken", function () {
         it("应该正确燃烧代币", async function () {
             const burnAmount = ethers.utils.parseEther("100");
             const reason = "Test burn";
-            
+
             await expect(
                 token.connect(user1).burnTokens(burnAmount, reason)
             ).to.emit(token, "TokensBurned")
-            .withArgs(user1.address, burnAmount, reason);
+                .withArgs(user1.address, burnAmount, reason);
         });
 
         it("应该在转账时自动燃烧", async function () {
             const transferAmount = ethers.utils.parseEther("1000");
             const expectedBurnAmount = transferAmount.mul(25).div(10000); // 0.25%
-            
+
             await expect(
                 token.connect(user1).transfer(user2.address, transferAmount)
             ).to.emit(token, "TokensBurned")
-            .withArgs(user1.address, expectedBurnAmount, "Auto-burn on transfer");
+                .withArgs(user1.address, expectedBurnAmount, "Auto-burn on transfer");
         });
     });
 

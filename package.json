@@ -15,7 +15,7 @@
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^2.0.0",
-    "hardhat": "^2.19.0"
+    "hardhat": "^2.22.0"
   },
   "scripts": {
     "test": "hardhat test",
@@ -25,5 +25,5 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs"
+  "type": "module"
 }

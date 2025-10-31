@@ -21,10 +21,23 @@ contract DIAPAgentNetwork is
     PausableUpgradeable 
 {
     
+    // ============ 枚举定义 ============
+    
+    /**
+     * @dev 标识符类型枚举
+     */
+    enum IdentifierType {
+        UNKNOWN,      // 未知类型
+        IPFS_CID,     // IPFS内容标识符
+        IPNS_NAME     // IPNS名称（推荐）
+    }
+    
     // ============ 结构体定义 ============
     
     struct Agent {
-        string didDocument;        // DID文档CID (IPFS)
+        string didDocument;        // DID文档标识符 (推荐IPNS名称，兼容IPFS CID)
+                                  // IPNS名称不变，可通过重新发布更新指向的内容
+                                  // 示例: k51qzi5uqu5dlvj2baxnqndepeb86cbk3ng7n3i46uzyxzyqj2xjonzllnv0v8
         string publicKey;          // 公钥
         uint256 reputation;        // 声誉分数 (0-10000)
         bool isActive;            // 是否活跃
@@ -61,7 +74,7 @@ contract DIAPAgentNetwork is
     address public verification; // DIAPVerification合约地址
     
     mapping(address => Agent) public agents;
-    mapping(string => address) public didToAgent;  // DID到地址映射
+    mapping(string => address) public didToAgent;  // DID标识符到地址映射 (支持IPNS名称和IPFS CID)
     mapping(bytes32 => Message) public messages;
     mapping(uint256 => Service) public services;
     
@@ -105,8 +118,15 @@ contract DIAPAgentNetwork is
     
     event AgentRegistered(
         address indexed agent, 
-        string didDocument, 
+        string didDocument,  // 支持IPNS名称和IPFS CID
         uint256 stakedAmount
+    );
+    
+    event AgentRegisteredWithIPNS(
+        address indexed agent,
+        string ipnsName,
+        uint256 stakedAmount,
+        uint256 timestamp
     );
     
     event AgentUnstaked(
@@ -207,7 +227,9 @@ contract DIAPAgentNetwork is
     
     /**
      * @dev 注册智能体
-     * @param didDocument DID文档CID
+     * @param didDocument DID文档标识符 (推荐使用IPNS名称，兼容IPFS CID)
+     *                    IPNS名称是不变的根域名，内容更新时无需修改链上标识符
+     *                    示例: k51qzi5uqu5dlvj2baxnqndepeb86cbk3ng7n3i46uzyxzyqj2xjonzllnv0v8
      * @param publicKey 公钥
      * @param stakedAmount 质押代币数量
      */
@@ -219,6 +241,7 @@ contract DIAPAgentNetwork is
         require(!agents[msg.sender].isActive, "Agent already registered");
         require(stakedAmount >= minStakeAmount, "Insufficient stake amount");
         require(bytes(didDocument).length > 0, "Invalid DID document");
+        require(_isValidIdentifier(didDocument), "Invalid identifier format");
         require(didToAgent[didDocument] == address(0), "DID already exists");
         
         // 计算总费用（质押金额 + 注册费用）
@@ -258,6 +281,11 @@ contract DIAPAgentNetwork is
         totalStaked += stakedAmount;
         
         emit AgentRegistered(msg.sender, didDocument, stakedAmount);
+        
+        // 如果使用IPNS名称，发射额外的IPNS事件
+        if (_getIdentifierType(didDocument) == IdentifierType.IPNS_NAME) {
+            emit AgentRegisteredWithIPNS(msg.sender, didDocument, stakedAmount, block.timestamp);
+        }
     }
     
     /**
@@ -508,6 +536,58 @@ contract DIAPAgentNetwork is
     
     // ============ 内部函数 ============
     
+    /**
+     * @dev 验证标识符格式是否有效
+     * @param identifier 标识符字符串
+     * @return 是否有效
+     */
+    function _isValidIdentifier(string memory identifier) internal pure returns (bool) {
+        bytes memory b = bytes(identifier);
+        uint256 len = b.length;
+        
+        // 长度检查：最小10字符，最大100字符
+        if (len < 10 || len > 100) return false;
+        
+        // 检查是否以有效前缀开头
+        if (len >= 2) {
+            // CIDv0: Qm
+            if (b[0] == 'Q' && b[1] == 'm') return true;
+            
+            // CIDv1: bafy, bafk, bafz
+            if (len >= 4 && b[0] == 'b' && b[1] == 'a' && b[2] == 'f') return true;
+            
+            // IPNS: k (base36编码的PeerID)
+            if (b[0] == 'k' && len >= 50) return true;
+        }
+        
+        return false;
+    }
+    
+    /**
+     * @dev 获取标识符类型
+     * @param identifier 标识符字符串
+     * @return 标识符类型
+     */
+    function _getIdentifierType(string memory identifier) internal pure returns (IdentifierType) {
+        bytes memory b = bytes(identifier);
+        uint256 len = b.length;
+        
+        if (len < 2) return IdentifierType.UNKNOWN;
+        
+        // IPNS 名称检测 (k开头，长度50-65)
+        if (b[0] == 'k' && len >= 50 && len <= 65) {
+            return IdentifierType.IPNS_NAME;
+        }
+        
+        // IPFS CID 检测
+        if ((b[0] == 'Q' && b[1] == 'm') || 
+            (len >= 4 && b[0] == 'b' && b[1] == 'a' && b[2] == 'f')) {
+            return IdentifierType.IPFS_CID;
+        }
+        
+        return IdentifierType.UNKNOWN;
+    }
+    
     function _verifyZKProof(uint256[8] calldata proof) internal pure returns (bool) {
         // 这里应该集成实际的Noir ZKP验证逻辑
         // 简化实现，实际需要调用ZKP验证合约
@@ -690,6 +770,16 @@ contract DIAPAgentNetwork is
         uint256 _totalRewards
     ) {
         return (totalAgents, totalMessages, totalServices, totalVolume, totalRewards);
+    }
+    
+    /**
+     * @dev 获取智能体标识符类型
+     * @param agent 智能体地址
+     * @return 标识符类型 (UNKNOWN, IPFS_CID, IPNS_NAME)
+     */
+    function getAgentIdentifierType(address agent) external view returns (IdentifierType) {
+        require(agents[agent].isActive, "Agent not registered");
+        return _getIdentifierType(agents[agent].didDocument);
     }
     
     

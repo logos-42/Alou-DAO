@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
-const { expect } = require("chai");
-const { ethers } = require("hardhat");
+import { expect } from "chai";
+import hre from "hardhat";
+const { ethers } = hre;
 
 describe("DIAPVerification", function () {
     let verification;

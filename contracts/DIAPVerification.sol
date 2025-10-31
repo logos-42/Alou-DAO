@@ -24,7 +24,7 @@ contract DIAPVerification is
     
     struct VerificationSession {
         address agent;
-        string didDocument;
+        string didDocument;  // DID文档标识符 (支持IPNS名称和IPFS CID)
         string publicKey;
         bytes32 commitment;  // 添加commitment存储
         bytes32 nullifier;   // 添加nullifier存储
@@ -35,7 +35,7 @@ contract DIAPVerification is
     }
     
     struct IdentityProof {
-        string didDocument;
+        string didDocument;  // DID文档标识符 (支持IPNS名称和IPFS CID)
         string publicKey;
         bytes32 commitment;
         bytes32 nullifier;
@@ -184,7 +184,7 @@ contract DIAPVerification is
     
     /**
      * @dev 发起身份验证
-     * @param didDocument DID文档CID
+     * @param didDocument DID文档标识符 (支持IPNS名称和IPFS CID)
      * @param publicKey 公钥
      * @param commitment 承诺
      * @param nullifier 空值

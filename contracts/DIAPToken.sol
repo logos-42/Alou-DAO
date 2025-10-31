@@ -30,11 +30,12 @@ contract DIAPToken is
     uint256 public constant INITIAL_SUPPLY = 100_000_000 * 10**18; // 1亿初始供应
     
     // 分配比例 (基点)
-    uint256 public constant COMMUNITY_ALLOCATION = 4000; // 40%
-    uint256 public constant TEAM_ALLOCATION = 2000;      // 20%
-    uint256 public constant TREASURY_ALLOCATION = 1500;  // 15%
-    uint256 public constant STAKING_ALLOCATION = 1500;   // 15%
-    uint256 public constant LIQUIDITY_ALLOCATION = 1000; // 10%
+    uint256 public constant COMMUNITY_ALLOCATION = 4500; // 45% 社区
+    uint256 public constant TREASURY_ALLOCATION = 2500;  // 25% 国库
+    uint256 public constant TEAM_ALLOCATION = 1500;      // 15% 开发者
+    uint256 public constant INVESTOR_ALLOCATION = 1500;  // 15% 投资人
+    uint256 public constant STAKING_ALLOCATION = 0;      // 0% (从其他池分配)
+    uint256 public constant LIQUIDITY_ALLOCATION = 0;    // 0% (从其他池分配)
     
     // ============ 质押机制 ============
     
@@ -169,38 +170,35 @@ contract DIAPToken is
     
     /**
      * @dev 执行初始代币分配
+     * 分配方案: 社区45%, 国库25%, 开发者15%, 投资人15%
      */
     function _performInitialDistribution() internal {
-        // 社区分配 (40%) - 分配给部署者，后续可转移
+        // 社区分配 (45%) - 分配给部署者，后续可转移
         uint256 communityAmount = INITIAL_SUPPLY * COMMUNITY_ALLOCATION / 10000;
         _mint(msg.sender, communityAmount);
         
-        // 团队分配 (20%) - 分配给部署者，后续可转移
-        uint256 teamAmount = INITIAL_SUPPLY * TEAM_ALLOCATION / 10000;
-        _mint(msg.sender, teamAmount);
-        
-        // 国库分配 (15%) - 分配给部署者，后续可转移
+        // 国库分配 (25%) - 分配给部署者，后续可转移到国库地址
         uint256 treasuryAmount = INITIAL_SUPPLY * TREASURY_ALLOCATION / 10000;
         _mint(msg.sender, treasuryAmount);
         
-        // 质押奖励池 (15%)
-        uint256 stakingAmount = INITIAL_SUPPLY * STAKING_ALLOCATION / 10000;
-        _mint(address(this), stakingAmount);
+        // 开发者分配 (15%) - 分配给部署者，后续可转移
+        uint256 teamAmount = INITIAL_SUPPLY * TEAM_ALLOCATION / 10000;
+        _mint(msg.sender, teamAmount);
         
-        // 流动性池 (10%) - 分配给部署者，后续可转移
-        uint256 liquidityAmount = INITIAL_SUPPLY * LIQUIDITY_ALLOCATION / 10000;
-        _mint(msg.sender, liquidityAmount);
+        // 投资人分配 (15%) - 分配给部署者，后续可转移
+        uint256 investorAmount = INITIAL_SUPPLY * INVESTOR_ALLOCATION / 10000;
+        _mint(msg.sender, investorAmount);
         
-        // 验证总分配量不超过初始供应量
-        uint256 totalAllocated = communityAmount + teamAmount + treasuryAmount + stakingAmount + liquidityAmount;
-        require(totalAllocated <= INITIAL_SUPPLY, "Total allocation exceeds initial supply");
+        // 验证总分配量等于初始供应量
+        uint256 totalAllocated = communityAmount + treasuryAmount + teamAmount + investorAmount;
+        require(totalAllocated == INITIAL_SUPPLY, "Total allocation must equal initial supply");
         
         emit InitialDistributionCompleted(
             communityAmount,
             teamAmount,
             treasuryAmount,
-            stakingAmount,
-            liquidityAmount
+            0, // stakingAmount (不再使用)
+            investorAmount // 使用liquidityAmount参数传递investorAmount
         );
     }
     

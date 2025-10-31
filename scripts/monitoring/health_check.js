@@ -62,6 +62,20 @@ async function main() {
             alerts.push(`⚠️ 合约余额不足：${hre.ethers.formatEther(contractBalance)} DIAP（建议 > ${hre.ethers.formatEther(minBalance)} DIAP）`);
         }
         
+        // 🆕 检查奖励池余额（关键告警）
+        if (totalStaked > 0n) {
+            const rewardPoolRatio = Number(contractBalance * 100n / totalStaked);
+            console.log("   奖励池比例:", rewardPoolRatio.toFixed(2), "% (余额/质押量)");
+            
+            if (rewardPoolRatio < 5) {
+                alerts.push(`🚨 严重：奖励池余额不足 5% 质押量！当前: ${rewardPoolRatio.toFixed(2)}%`);
+            } else if (rewardPoolRatio < 10) {
+                alerts.push(`⚠️ 警告：奖励池余额低于 10% 质押量，当前: ${rewardPoolRatio.toFixed(2)}%`);
+            } else if (rewardPoolRatio < 15) {
+                warnings.push(`⚠️ 注意：奖励池余额低于 15% 质押量，当前: ${rewardPoolRatio.toFixed(2)}%`);
+            }
+        }
+        
         // 检查质押率
         const stakingRatio = Number(totalStaked * 10000n / totalSupply) / 100;
         console.log("   质押率:", stakingRatio.toFixed(2), "%");

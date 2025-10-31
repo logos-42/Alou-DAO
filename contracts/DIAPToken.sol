@@ -148,6 +148,24 @@ contract DIAPToken is
     event StakingRewardRateUpdated(uint256 newRate);
     event BurnRateUpdated(uint256 newRate);
     
+    // 奖励池警告事件
+    event RewardPoolLow(
+        address indexed user,
+        uint256 paidAmount,
+        uint256 unpaidAmount
+    );
+    
+    event RewardPoolDepleted(
+        address indexed user,
+        uint256 unpaidAmount
+    );
+    
+    event RewardPoolReplenished(
+        address indexed from,
+        uint256 amount,
+        uint256 newBalance
+    );
+    
     event StakingTierUpdated(
         uint256 tier,
         uint256 minAmount,
@@ -398,36 +416,49 @@ contract DIAPToken is
     }
     
     /**
-     * @dev 动态奖励分发系统
+     * @dev 动态奖励分发系统（改进版）
      * @param recipient 接收者
      * @param amount 奖励数量
      */
     function _distributeRewards(address recipient, uint256 amount) internal {
         uint256 contractBalance = balanceOf(address(this));
         
+        // 如果奖励池完全耗尽，记录待支付奖励
+        if (contractBalance == 0) {
+            // 记录到用户的待领取奖励中
+            StakingInfo storage info = stakingInfo[recipient];
+            info.pendingRewards += amount;
+            
+            // 发出警告事件
+            emit RewardPoolDepleted(recipient, amount);
+            return;
+        }
+        
         if (contractBalance >= amount) {
             // 余额充足，直接转账
             _transfer(address(this), recipient, amount);
             totalRewardsDistributed += amount;
         } else {
-            // 余额不足，先调整奖励率
-            _adjustRewardRate();
+            // 余额不足但还有一些，按比例支付
+            // 计算可支付的比例
+            uint256 payableAmount = contractBalance;
+            uint256 unpaidAmount = amount - payableAmount;
             
-            // 重新计算奖励
-            uint256 adjustedAmount = _calculateAdjustedRewards(recipient);
+            // 支付可支付部分
+            _transfer(address(this), recipient, payableAmount);
+            totalRewardsDistributed += payableAmount;
             
-            if (contractBalance >= adjustedAmount) {
-                _transfer(address(this), recipient, adjustedAmount);
-                totalRewardsDistributed += adjustedAmount;
-            } else {
-                // 如果调整后仍不足，使用最低奖励率
-                uint256 minReward = adjustedAmount * MIN_REWARD_RATE / stakingRewardRate;
-                if (contractBalance >= minReward) {
-                    _transfer(address(this), recipient, minReward);
-                    totalRewardsDistributed += minReward;
-                }
-                // 如果连最低奖励都无法支付，则不支付奖励
+            // 未支付部分记录到待领取奖励
+            StakingInfo storage info = stakingInfo[recipient];
+            info.pendingRewards += unpaidAmount;
+            
+            // 自动调整奖励率，防止进一步耗尽
+            if (block.timestamp >= lastRateAdjustment + RATE_ADJUSTMENT_INTERVAL) {
+                _adjustRewardRate();
             }
+            
+            // 发出警告事件
+            emit RewardPoolLow(recipient, payableAmount, unpaidAmount);
         }
     }
     
@@ -572,6 +603,44 @@ contract DIAPToken is
         if (_rate > 100) revert RateTooHigh(); // 最大1%
         burnRate = _rate;
         emit BurnRateUpdated(_rate);
+    }
+    
+    /**
+     * @dev 补充奖励池（仅限 owner）
+     * @param amount 补充数量
+     * @notice 从 owner 账户转移代币到合约作为奖励池
+     */
+    function replenishRewardPool(uint256 amount) external onlyOwner {
+        if (amount == 0) revert AmountMustBeGreaterThanZero();
+        
+        // 从 owner 转移到合约
+        _transfer(msg.sender, address(this), amount);
+        
+        emit RewardPoolReplenished(msg.sender, amount, balanceOf(address(this)));
+    }
+    
+    /**
+     * @dev 获取奖励池状态
+     * @return balance 当前余额
+     * @return ratio 余额/质押量比例（百分比）
+     * @return isHealthy 是否健康（>10%）
+     */
+    function getRewardPoolStatus() external view returns (
+        uint256 balance,
+        uint256 ratio,
+        bool isHealthy
+    ) {
+        balance = balanceOf(address(this));
+        
+        if (totalStaked > 0) {
+            ratio = balance * 100 / totalStaked;
+            isHealthy = ratio >= 10; // 至少10%
+        } else {
+            ratio = 0;
+            isHealthy = true; // 没有质押时认为健康
+        }
+        
+        return (balance, ratio, isHealthy);
     }
     
     /**

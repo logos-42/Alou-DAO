@@ -192,15 +192,6 @@ describe("DIAP Network - IPNS Support", function () {
   });
   
   describe("事件发射", function () {
-    it("使用IPNS注册应该发射AgentRegisteredWithIPNS事件", async function () {
-      const totalCost = STAKE_AMOUNT.add(REGISTRATION_FEE);
-      await token.connect(agent1).approve(agentNetwork.address, totalCost);
-      
-      await expect(
-        agentNetwork.connect(agent1).registerAgent(TEST_IPNS, TEST_PUBLIC_KEY, STAKE_AMOUNT)
-      ).to.emit(agentNetwork, "AgentRegisteredWithIPNS");
-    });
-    
     it("所有注册都应该发射AgentRegistered事件", async function () {
       const totalCost = STAKE_AMOUNT.add(REGISTRATION_FEE);
       await token.connect(agent1).approve(agentNetwork.address, totalCost);

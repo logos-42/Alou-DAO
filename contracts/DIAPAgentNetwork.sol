@@ -35,18 +35,18 @@ contract DIAPAgentNetwork is
     // ============ 结构体定义 ============
     
     struct Agent {
-        string didDocument;        // DID文档标识符 (推荐IPNS名称，兼容IPFS CID)
+        string didDocument;        // DID文档标识符 (优先IPNS名称，兼容IPFS CID)
                                   // IPNS名称不变，可通过重新发布更新指向的内容
                                   // 示例: k51qzi5uqu5dlvj2baxnqndepeb86cbk3ng7n3i46uzyxzyqj2xjonzllnv0v8
         string publicKey;          // 公钥
-        uint256 reputation;        // 声誉分数 (0-10000)
-        bool isActive;            // 是否活跃
-        uint256 registrationTime; // 注册时间
-        uint256 lastActivity;     // 最后活动时间
-        uint256 stakedAmount;     // 质押代币数量
-        uint256 totalEarnings;    // 总收益
-        uint256 totalServices;    // 提供服务次数
-        bool isVerified;          // 是否通过ZKP验证
+        uint128 stakedAmount;     // 质押代币数量 (打包优化)
+        uint128 totalEarnings;    // 总收益 (打包优化)
+        uint64 reputation;        // 声誉分数 (0-65535，打包优化)
+        uint64 registrationTime;  // 注册时间 (打包优化)
+        uint64 lastActivity;      // 最后活动时间 (打包优化)
+        uint32 totalServices;     // 提供服务次数 (打包优化)
+        bool isActive;            // 是否活跃 (打包优化)
+        bool isVerified;          // 是否通过ZKP验证 (打包优化)
     }
     
     struct Message {
@@ -240,8 +240,15 @@ contract DIAPAgentNetwork is
     ) external nonReentrant whenNotPaused {
         require(!agents[msg.sender].isActive, "Agent already registered");
         require(stakedAmount >= minStakeAmount, "Insufficient stake amount");
+        require(stakedAmount <= type(uint128).max, "Stake amount too large");
         require(bytes(didDocument).length > 0, "Invalid DID document");
         require(_isValidIdentifier(didDocument), "Invalid identifier format");
+        
+        // 优先使用IPNS，检查标识符类型
+        IdentifierType idType = _getIdentifierType(didDocument);
+        require(idType == IdentifierType.IPNS_NAME || idType == IdentifierType.IPFS_CID, 
+                "Must use IPNS name (preferred) or IPFS CID");
+        
         require(didToAgent[didDocument] == address(0), "DID already exists");
         
         // 计算总费用（质押金额 + 注册费用）
@@ -257,17 +264,17 @@ contract DIAPAgentNetwork is
         // 累积注册费
         accumulatedFees += registrationFee;
         
-        // 创建智能体
+        // 创建智能体 (Gas优化: 不显式设置默认值)
         agents[msg.sender] = Agent({
             didDocument: didDocument,
             publicKey: publicKey,
+            stakedAmount: uint128(stakedAmount),
+            totalEarnings: 0,  // 显式设置以避免混淆
             reputation: 1000,  // 初始声誉
+            registrationTime: uint64(block.timestamp),
+            lastActivity: uint64(block.timestamp),
+            totalServices: 0,  // 显式设置以避免混淆
             isActive: true,
-            registrationTime: block.timestamp,
-            lastActivity: block.timestamp,
-            stakedAmount: stakedAmount,
-            totalEarnings: 0,
-            totalServices: 0,
             isVerified: false
         });
         
@@ -281,11 +288,6 @@ contract DIAPAgentNetwork is
         totalStaked += stakedAmount;
         
         emit AgentRegistered(msg.sender, didDocument, stakedAmount);
-        
-        // 如果使用IPNS名称，发射额外的IPNS事件
-        if (_getIdentifierType(didDocument) == IdentifierType.IPNS_NAME) {
-            emit AgentRegisteredWithIPNS(msg.sender, didDocument, stakedAmount, block.timestamp);
-        }
     }
     
     /**
@@ -391,8 +393,8 @@ contract DIAPAgentNetwork is
         totalVolume += messageFee;
         
         // 更新活动时间
-        agents[msg.sender].lastActivity = block.timestamp;
-        agents[toAgent].lastActivity = block.timestamp;
+        agents[msg.sender].lastActivity = uint64(block.timestamp);
+        agents[toAgent].lastActivity = uint64(block.timestamp);
         
         emit MessageSent(messageId, msg.sender, toAgent, messageFee);
     }
@@ -470,15 +472,22 @@ contract DIAPAgentNetwork is
         }
         
         // 更新智能体信息
-        uint256 oldReputation = agents[msg.sender].reputation;
-        agents[msg.sender].totalEarnings += reward;
-        agents[msg.sender].totalServices++;
-        agents[msg.sender].reputation += 10; // 完成服务奖励声誉
+        Agent storage agent = agents[msg.sender];
+        uint256 oldReputation = agent.reputation;
+        
+        // 安全检查：确保不会溢出
+        require(uint256(agent.totalEarnings) + reward <= type(uint128).max, "Total earnings overflow");
+        require(agent.totalServices < type(uint32).max, "Total services overflow");
+        require(agent.reputation + 10 <= type(uint64).max, "Reputation overflow");
+        
+        agent.totalEarnings += uint128(reward);
+        agent.totalServices++;
+        agent.reputation += 10; // 完成服务奖励声誉
         
         totalVolume += service.price;
         
         emit ServiceCompleted(serviceId, resultCID, reward);
-        emit ReputationUpdated(msg.sender, oldReputation, agents[msg.sender].reputation);
+        emit ReputationUpdated(msg.sender, oldReputation, agent.reputation);
     }
     
     // ============ 声誉管理 ============
@@ -498,6 +507,7 @@ contract DIAPAgentNetwork is
         if (reputationChange > 0) {
             newReputation = oldReputation + uint256(reputationChange);
             if (newReputation > 10000) newReputation = 10000;
+            if (newReputation > type(uint64).max) newReputation = type(uint64).max;
         } else {
             uint256 decrease = uint256(-reputationChange);
             if (decrease >= oldReputation) {
@@ -507,7 +517,7 @@ contract DIAPAgentNetwork is
             }
         }
         
-        agents[agent].reputation = newReputation;
+        agents[agent].reputation = uint64(newReputation);
         emit ReputationUpdated(agent, oldReputation, newReputation);
     }
     

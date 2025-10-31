@@ -256,18 +256,19 @@ contract DIAPPaymentCore is
         require(bytes(resultCID).length > 0, "Invalid result CID");
         require(block.timestamp <= service.timestamp + 30 days, "Service expired");
 
+        uint256 providerAmount = service.price;
+        
+        // 更新状态（Checks-Effects-Interactions 模式）
         service.status = ServiceStatus.Completed;
         service.completionTime = block.timestamp;
         service.resultCID = resultCID;
+        totalVolume += service.price;
 
-        uint256 providerAmount = service.price;
-
+        // 外部调用放在最后（Interactions）
         require(
             token.transfer(service.provider, providerAmount),
             "Transfer to provider failed"
         );
-
-        totalVolume += service.price;
 
         emit ServiceCompleted(serviceId, service.provider, providerAmount);
     }

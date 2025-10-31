@@ -15,7 +15,8 @@
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^2.0.0",
-    "hardhat": "^2.22.0"
+    "hardhat": "^2.22.0",
+    "solhint": "^6.0.1"
   },
   "scripts": {
     "test": "hardhat test",

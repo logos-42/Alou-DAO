@@ -454,13 +454,28 @@ contract DIAPAgentNetwork is
         // 检查服务是否过期（例如30天）
         require(block.timestamp <= service.timestamp + 30 days, "Service expired");
         
-        service.isCompleted = true;
-        service.resultCID = resultCID;
-        
         // 计算奖励和费用
         uint256 reward = service.price * (10000 - serviceFeeRate) / 10000;
         // uint256 fee = service.price - reward; // 费用留在合约中
         
+        // 更新智能体信息（在转账之前，防止重入攻击）
+        Agent storage agent = agents[msg.sender];
+        uint256 oldReputation = agent.reputation;
+        
+        // 安全检查：确保不会溢出
+        require(uint256(agent.totalEarnings) + reward <= type(uint128).max, "Total earnings overflow");
+        require(agent.totalServices < type(uint32).max, "Total services overflow");
+        require(agent.reputation + 10 <= type(uint64).max, "Reputation overflow");
+        
+        // 更新状态（Checks-Effects-Interactions 模式）
+        service.isCompleted = true;
+        service.resultCID = resultCID;
+        agent.totalEarnings += uint128(reward);
+        agent.totalServices++;
+        agent.reputation += 10; // 完成服务奖励声誉
+        totalVolume += service.price;
+        
+        // 外部调用放在最后（Interactions）
         // 检查合约代币余额是否足够支付奖励
         if (token.balanceOf(address(this)) >= reward) {
             // 从合约余额支付奖励
@@ -470,21 +485,6 @@ contract DIAPAgentNetwork is
             // 这里简化处理，实际应用中需要更复杂的逻辑
             require(false, "Insufficient contract balance for rewards");
         }
-        
-        // 更新智能体信息
-        Agent storage agent = agents[msg.sender];
-        uint256 oldReputation = agent.reputation;
-        
-        // 安全检查：确保不会溢出
-        require(uint256(agent.totalEarnings) + reward <= type(uint128).max, "Total earnings overflow");
-        require(agent.totalServices < type(uint32).max, "Total services overflow");
-        require(agent.reputation + 10 <= type(uint64).max, "Reputation overflow");
-        
-        agent.totalEarnings += uint128(reward);
-        agent.totalServices++;
-        agent.reputation += 10; // 完成服务奖励声誉
-        
-        totalVolume += service.price;
         
         emit ServiceCompleted(serviceId, resultCID, reward);
         emit ReputationUpdated(msg.sender, oldReputation, agent.reputation);

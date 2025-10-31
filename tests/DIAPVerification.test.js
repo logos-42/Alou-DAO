@@ -42,7 +42,7 @@ describe("DIAPVerification", function () {
             
             await expect(
                 newVerification.initialize(ethers.constants.AddressZero)
-            ).to.be.revertedWith("Invalid agent network address");
+            ).to.be.revertedWithCustomError(newVerification, "InvalidAgentNetworkAddress");
         });
     });
 
@@ -72,7 +72,7 @@ describe("DIAPVerification", function () {
                     ethers.utils.keccak256(ethers.utils.toUtf8Bytes("nullifier")),
                     proof
                 )
-            ).to.be.revertedWith("Invalid DID document length");
+            ).to.be.revertedWithCustomError(verification, "InvalidDIDDocumentLength");
         });
 
         it("应该拒绝过长的公钥", async function () {
@@ -87,7 +87,7 @@ describe("DIAPVerification", function () {
                     ethers.utils.keccak256(ethers.utils.toUtf8Bytes("nullifier")),
                     proof
                 )
-            ).to.be.revertedWith("Invalid public key length");
+            ).to.be.revertedWithCustomError(verification, "InvalidPublicKeyLength");
         });
     });
 
@@ -114,7 +114,7 @@ describe("DIAPVerification", function () {
                     nullifier, // 相同的nullifier
                     proof
                 )
-            ).to.be.revertedWith("Nullifier already used");
+            ).to.be.revertedWithCustomError(verification, "NullifierAlreadyUsed");
         });
     });
 

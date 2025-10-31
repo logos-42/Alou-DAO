@@ -93,7 +93,7 @@ describe("DIAP Network - IPNS Support", function () {
           TEST_PUBLIC_KEY,
           STAKE_AMOUNT
         )
-      ).to.be.revertedWith("Invalid identifier format");
+      ).to.be.revertedWithCustomError(agentNetwork, "InvalidIdentifierFormat");
     });
     
     it("应该拒绝过短的标识符", async function () {
@@ -106,7 +106,7 @@ describe("DIAP Network - IPNS Support", function () {
           TEST_PUBLIC_KEY,
           STAKE_AMOUNT
         )
-      ).to.be.revertedWith("Invalid identifier format");
+      ).to.be.revertedWithCustomError(agentNetwork, "InvalidIdentifierFormat");
     });
     
     it("应该拒绝过长的标识符", async function () {
@@ -120,7 +120,7 @@ describe("DIAP Network - IPNS Support", function () {
           TEST_PUBLIC_KEY,
           STAKE_AMOUNT
         )
-      ).to.be.revertedWith("Invalid identifier format");
+      ).to.be.revertedWithCustomError(agentNetwork, "InvalidIdentifierFormat");
     });
   });
   

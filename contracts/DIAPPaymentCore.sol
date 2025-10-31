@@ -20,6 +20,39 @@ contract DIAPPaymentCore is
     ReentrancyGuardUpgradeable,
     PausableUpgradeable
 {
+    // ============ Custom Errors ============
+    
+    error AmountMustBeGreaterThanZero();
+    error PaymentIDRequired();
+    error PaymentIDAlreadyExists();
+    error SenderNotRegistered();
+    error RecipientNotRegistered();
+    error InsufficientBalance();
+    error PaymentNotFound();
+    error PaymentNotPending();
+    error NotPaymentRecipient();
+    error PaymentExpired();
+    error InsufficientAllowance();
+    error TransferToRecipientFailed();
+    error TransferFeeFailed();
+    error NotPaymentSender();
+    error InvalidProviderAddress();
+    error CannotCreateServiceForSelf();
+    error InvalidPrice();
+    error ServiceTypeCIDRequired();
+    error ConsumerNotRegistered();
+    error ProviderNotRegistered();
+    error TokenTransferFailed();
+    error NotServiceProvider();
+    error ServiceNotEscrowed();
+    error InvalidResultCID();
+    error ServiceExpired();
+    error TransferToProviderFailed();
+    error NotServiceConsumer();
+    error CancellationPeriodExpired();
+    error RefundTransferFailed();
+    error RateTooHigh();
+    
     // ============ 结构体定义 ============
 
     struct Payment {
@@ -125,16 +158,16 @@ contract DIAPPaymentCore is
         string calldata description,
         string calldata metadata
     ) external nonReentrant whenNotPaused {
-        require(amount > 0, "Amount must be greater than 0");
-        require(bytes(paymentId).length > 0, "Payment ID required");
-        require(payments[paymentId].timestamp == 0, "Payment ID already exists");
-        require(agentNetwork.getAgent(msg.sender).isActive, "Sender not registered");
-        require(agentNetwork.getAgent(to).isActive, "Recipient not registered");
+        if (amount == 0) revert AmountMustBeGreaterThanZero();
+        if (bytes(paymentId).length == 0) revert PaymentIDRequired();
+        if (payments[paymentId].timestamp != 0) revert PaymentIDAlreadyExists();
+        if (!agentNetwork.getAgent(msg.sender).isActive) revert SenderNotRegistered();
+        if (!agentNetwork.getAgent(to).isActive) revert RecipientNotRegistered();
 
         uint256 fee = (amount * paymentFeeRate) / 10000;
         uint256 totalAmount = amount + fee;
 
-        require(token.balanceOf(msg.sender) >= totalAmount, "Insufficient balance");
+        if (token.balanceOf(msg.sender) < totalAmount) revert InsufficientBalance();
 
         payments[paymentId] = Payment({
             from: msg.sender,
@@ -154,29 +187,20 @@ contract DIAPPaymentCore is
 
     function confirmPayment(string calldata paymentId) external nonReentrant whenNotPaused {
         Payment storage payment = payments[paymentId];
-        require(payment.timestamp > 0, "Payment not found");
-        require(payment.status == PaymentStatus.PENDING, "Payment not pending");
-        require(payment.to == msg.sender, "Not payment recipient");
-        require(block.timestamp <= payment.timestamp + 24 hours, "Payment expired");
+        if (payment.timestamp == 0) revert PaymentNotFound();
+        if (payment.status != PaymentStatus.PENDING) revert PaymentNotPending();
+        if (payment.to != msg.sender) revert NotPaymentRecipient();
+        if (block.timestamp > payment.timestamp + 24 hours) revert PaymentExpired();
 
         uint256 fee = (payment.amount * paymentFeeRate) / 10000;
         uint256 totalAmount = payment.amount + fee;
 
-        require(token.balanceOf(payment.from) >= totalAmount, "Insufficient balance");
-        require(
-            token.allowance(payment.from, address(this)) >= totalAmount,
-            "Insufficient allowance"
-        );
+        if (token.balanceOf(payment.from) < totalAmount) revert InsufficientBalance();
+        if (token.allowance(payment.from, address(this)) < totalAmount) revert InsufficientAllowance();
 
-        require(
-            token.transferFrom(payment.from, payment.to, payment.amount),
-            "Transfer to recipient failed"
-        );
+        if (!token.transferFrom(payment.from, payment.to, payment.amount)) revert TransferToRecipientFailed();
         if (fee > 0) {
-            require(
-                token.transferFrom(payment.from, address(this), fee),
-                "Transfer fee failed"
-            );
+            if (!token.transferFrom(payment.from, address(this), fee)) revert TransferFeeFailed();
         }
 
         payment.status = PaymentStatus.CONFIRMED;
@@ -187,9 +211,9 @@ contract DIAPPaymentCore is
 
     function cancelPayment(string calldata paymentId) external {
         Payment storage payment = payments[paymentId];
-        require(payment.timestamp > 0, "Payment not found");
-        require(payment.status == PaymentStatus.PENDING, "Payment not pending");
-        require(payment.from == msg.sender, "Not payment sender");
+        if (payment.timestamp == 0) revert PaymentNotFound();
+        if (payment.status != PaymentStatus.PENDING) revert PaymentNotPending();
+        if (payment.from != msg.sender) revert NotPaymentSender();
 
         payment.status = PaymentStatus.CANCELLED;
 
@@ -203,27 +227,21 @@ contract DIAPPaymentCore is
         string calldata serviceTypeCID,
         uint256 price
     ) external nonReentrant whenNotPaused returns (uint256) {
-        require(provider != address(0), "Invalid provider address");
-        require(provider != msg.sender, "Cannot create service for self");
-        require(price > 0, "Invalid price");
-        require(bytes(serviceTypeCID).length > 0, "Service type CID required");
+        if (provider == address(0)) revert InvalidProviderAddress();
+        if (provider == msg.sender) revert CannotCreateServiceForSelf();
+        if (price == 0) revert InvalidPrice();
+        if (bytes(serviceTypeCID).length == 0) revert ServiceTypeCIDRequired();
 
-        require(agentNetwork.getAgent(msg.sender).isActive, "Consumer not registered");
-        require(agentNetwork.getAgent(provider).isActive, "Provider not registered");
+        if (!agentNetwork.getAgent(msg.sender).isActive) revert ConsumerNotRegistered();
+        if (!agentNetwork.getAgent(provider).isActive) revert ProviderNotRegistered();
 
         uint256 fee = (price * paymentFeeRate) / 10000;
         uint256 totalAmount = price + fee;
 
-        require(token.balanceOf(msg.sender) >= totalAmount, "Insufficient balance");
-        require(
-            token.allowance(msg.sender, address(this)) >= totalAmount,
-            "Insufficient allowance"
-        );
+        if (token.balanceOf(msg.sender) < totalAmount) revert InsufficientBalance();
+        if (token.allowance(msg.sender, address(this)) < totalAmount) revert InsufficientAllowance();
 
-        require(
-            token.transferFrom(msg.sender, address(this), totalAmount),
-            "Token transfer failed"
-        );
+        if (!token.transferFrom(msg.sender, address(this), totalAmount)) revert TokenTransferFailed();
 
         uint256 serviceId = totalServices;
         services[serviceId] = Service({
@@ -250,11 +268,11 @@ contract DIAPPaymentCore is
         string calldata resultCID
     ) external nonReentrant whenNotPaused {
         Service storage service = services[serviceId];
-        require(service.timestamp > 0, "Service not found");
-        require(service.provider == msg.sender, "Not service provider");
-        require(service.status == ServiceStatus.Escrowed, "Service not escrowed");
-        require(bytes(resultCID).length > 0, "Invalid result CID");
-        require(block.timestamp <= service.timestamp + 30 days, "Service expired");
+        if (service.timestamp == 0) revert PaymentNotFound();
+        if (service.provider != msg.sender) revert NotServiceProvider();
+        if (service.status != ServiceStatus.Escrowed) revert ServiceNotEscrowed();
+        if (bytes(resultCID).length == 0) revert InvalidResultCID();
+        if (block.timestamp > service.timestamp + 30 days) revert ServiceExpired();
 
         uint256 providerAmount = service.price;
         
@@ -275,18 +293,15 @@ contract DIAPPaymentCore is
 
     function cancelServiceOrder(uint256 serviceId) external nonReentrant {
         Service storage service = services[serviceId];
-        require(service.timestamp > 0, "Service not found");
-        require(service.consumer == msg.sender, "Not service consumer");
-        require(service.status == ServiceStatus.Escrowed, "Service not escrowed");
-        require(
-            block.timestamp <= service.timestamp + 24 hours,
-            "Cancellation period expired"
-        );
+        if (service.timestamp == 0) revert PaymentNotFound();
+        if (service.consumer != msg.sender) revert NotServiceConsumer();
+        if (service.status != ServiceStatus.Escrowed) revert ServiceNotEscrowed();
+        if (block.timestamp > service.timestamp + 24 hours) revert CancellationPeriodExpired();
 
         service.status = ServiceStatus.Cancelled;
 
         uint256 refundAmount = service.escrowedAmount;
-        require(token.transfer(service.consumer, refundAmount), "Refund transfer failed");
+        if (!token.transfer(service.consumer, refundAmount)) revert RefundTransferFailed();
 
         emit ServiceCancelled(serviceId, refundAmount);
     }
@@ -294,7 +309,7 @@ contract DIAPPaymentCore is
     // ============ 管理函数 ============
 
     function setPaymentFeeRate(uint256 _rate) external onlyOwner {
-        require(_rate <= 100, "Rate too high");
+        if (_rate > 100) revert RateTooHigh();
         paymentFeeRate = _rate;
     }
 

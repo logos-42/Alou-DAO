@@ -1,0 +1,74 @@
+=== DIAP 合约地址 ===
+
+网络: Sepolia 测试网
+Chain ID: 11155111
+
+--- 核心合约 ---
+
+DIAPToken:
+地址: [待填写]
+部署区块: [待填写]
+部署时间: [待填写]
+
+DIAPAgentNetwork:
+地址: [待填写]
+部署区块: [待填写]
+
+DIAPPaymentCore:
+地址: [待填写]
+部署区块: [待填写]
+
+DIAPPaymentChannel:
+地址: [待填写]
+部署区块: [待填写]
+
+DIAPPaymentPrivacy:
+地址: [待填写]
+部署区块: [待填写]
+
+DIAPGovernance:
+地址: [待填写]
+部署区块: [待填写]
+
+DIAPVerification:
+地址: [待填写]
+部署区块: [待填写]
+
+--- 多签钱包 ---
+
+Gnosis Safe:
+地址: [待填写]
+所有者 1: [待填写]
+所有者 2: [待填写]
+所有者 3: [待填写]
+阈值: 2/3
+
+--- 部署信息 ---
+
+部署者地址: [待填写]
+部署交易: [待填写]
+Gas 消耗: [待填写]
+
+--- RPC URLs ---
+
+Sepolia Infura: https://sepolia.infura.io/v3/YOUR_KEY
+Sepolia Alchemy: https://eth-sepolia.g.alchemy.com/v2/YOUR_KEY
+Sepolia Public: https://rpc.sepolia.org
+
+--- 区块浏览器 ---
+
+Etherscan: https://sepolia.etherscan.io
+Tenderly: https://dashboard.tenderly.co
+
+--- 最后更新 ---
+
+日期: [待填写]
+更新人: [你的名字]
+版本: v0.3.0
+
+=== 使用说明 ===
+
+1. 部署后立即填写所有地址
+2. 保存到多个位置（云端+本地）
+3. 定期验证地址正确性
+4. 更新后记录变更历史

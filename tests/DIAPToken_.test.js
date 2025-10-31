@@ -54,7 +54,7 @@ describe("DIAPToken", function () {
 
             await expect(
                 token.connect(user1).stake(amount, 0)
-            ).to.be.revertedWith("Amount below tier minimum");
+            ).to.be.revertedWithCustomError(token, "AmountBelowTierMinimum");
         });
 
         it("应该允许追加质押但不允许层级跳跃", async function () {
@@ -80,7 +80,7 @@ describe("DIAPToken", function () {
             const silverAmount = ethers.utils.parseEther("10000"); // 白银级最低要求
             await expect(
                 token.connect(user1).stake(silverAmount, 1)
-            ).to.be.revertedWith("Tier change not allowed for additional stake");
+            ).to.be.revertedWithCustomError(token, "TierChangeNotAllowed");
         });
     });
 
@@ -104,7 +104,7 @@ describe("DIAPToken", function () {
             // 直接调整应该失败
             await expect(
                 token.setStakingRewardRate(newRate)
-            ).to.be.revertedWith("Action not scheduled");
+            ).to.be.revertedWithCustomError(token, "ActionNotScheduled");
         });
 
         it("应该允许安排奖励率调整", async function () {
@@ -139,7 +139,7 @@ describe("DIAPToken", function () {
 
             await expect(
                 token.connect(user1).stake(amount, 0)
-            ).to.be.revertedWith("Contract is emergency paused");
+            ).to.be.revertedWithCustomError(token, "ContractEmergencyPaused");
         });
 
         it("应该允许紧急提取", async function () {

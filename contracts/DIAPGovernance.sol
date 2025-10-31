@@ -27,6 +27,17 @@ contract DIAPGovernance is
     Ownable
 {
     
+    // ============ Custom Errors ============
+    
+    error NotAuthorizedToCreateProposals();
+    error NotAuthorizedForEmergencyActions();
+    error EmergencyActionFailed();
+    error InvalidMultisigWalletAddress();
+    error NotAuthorized();
+    error NotAuthorizedForUpgrade();
+    error TotalVotesOverflow();
+    error ReputationVotesOverflow();
+    
     // ============ 提案类型 ============
     
     enum ProposalType {
@@ -124,12 +135,12 @@ contract DIAPGovernance is
      * @param description 提案描述
      */
     function proposeNetworkUpgrade(
-        address[] memory targets,
-        uint256[] memory values,
-        bytes[] memory calldatas,
-        string memory description
+        address[] calldata targets,
+        uint256[] calldata values,
+        bytes[] calldata calldatas,
+        string calldata description
     ) external returns (uint256) {
-        require(proposalCreators[msg.sender] || _isVerifiedAgent(msg.sender), "Not authorized to create proposals");
+        if (!proposalCreators[msg.sender] && !_isVerifiedAgent(msg.sender)) revert NotAuthorizedToCreateProposals();
         
         uint256 proposalId = propose(targets, values, calldatas, description);
         proposalTypes[proposalId] = ProposalType.NETWORK_UPGRADE;
@@ -146,12 +157,12 @@ contract DIAPGovernance is
      * @param description 提案描述
      */
     function proposeParameterChange(
-        address[] memory targets,
-        uint256[] memory values,
-        bytes[] memory calldatas,
-        string memory description
+        address[] calldata targets,
+        uint256[] calldata values,
+        bytes[] calldata calldatas,
+        string calldata description
     ) external returns (uint256) {
-        require(proposalCreators[msg.sender] || _isVerifiedAgent(msg.sender), "Not authorized to create proposals");
+        if (!proposalCreators[msg.sender] && !_isVerifiedAgent(msg.sender)) revert NotAuthorizedToCreateProposals();
         
         uint256 proposalId = propose(targets, values, calldatas, description);
         proposalTypes[proposalId] = ProposalType.PARAMETER_CHANGE;
@@ -168,12 +179,12 @@ contract DIAPGovernance is
      * @param description 提案描述
      */
     function proposeTreasuryManagement(
-        address[] memory targets,
-        uint256[] memory values,
-        bytes[] memory calldatas,
-        string memory description
+        address[] calldata targets,
+        uint256[] calldata values,
+        bytes[] calldata calldatas,
+        string calldata description
     ) external returns (uint256) {
-        require(proposalCreators[msg.sender] || _isVerifiedAgent(msg.sender), "Not authorized to create proposals");
+        if (!proposalCreators[msg.sender] && !_isVerifiedAgent(msg.sender)) revert NotAuthorizedToCreateProposals();
         
         uint256 proposalId = propose(targets, values, calldatas, description);
         proposalTypes[proposalId] = ProposalType.TREASURY_MANAGEMENT;
@@ -190,12 +201,12 @@ contract DIAPGovernance is
      * @param description 提案描述
      */
     function proposeAgentPolicy(
-        address[] memory targets,
-        uint256[] memory values,
-        bytes[] memory calldatas,
-        string memory description
+        address[] calldata targets,
+        uint256[] calldata values,
+        bytes[] calldata calldatas,
+        string calldata description
     ) external returns (uint256) {
-        require(proposalCreators[msg.sender] || _isVerifiedAgent(msg.sender), "Not authorized to create proposals");
+        if (!proposalCreators[msg.sender] && !_isVerifiedAgent(msg.sender)) revert NotAuthorizedToCreateProposals();
         
         uint256 proposalId = propose(targets, values, calldatas, description);
         proposalTypes[proposalId] = ProposalType.AGENT_POLICY;
@@ -212,12 +223,12 @@ contract DIAPGovernance is
      * @param description 提案描述
      */
     function proposeTokenEconomics(
-        address[] memory targets,
-        uint256[] memory values,
-        bytes[] memory calldatas,
-        string memory description
+        address[] calldata targets,
+        uint256[] calldata values,
+        bytes[] calldata calldatas,
+        string calldata description
     ) external returns (uint256) {
-        require(proposalCreators[msg.sender] || _isVerifiedAgent(msg.sender), "Not authorized to create proposals");
+        if (!proposalCreators[msg.sender] && !_isVerifiedAgent(msg.sender)) revert NotAuthorizedToCreateProposals();
         
         uint256 proposalId = propose(targets, values, calldatas, description);
         proposalTypes[proposalId] = ProposalType.TOKEN_ECONOMICS;
@@ -234,12 +245,12 @@ contract DIAPGovernance is
      * @param description 提案描述
      */
     function proposeEmergencyAction(
-        address[] memory targets,
-        uint256[] memory values,
-        bytes[] memory calldatas,
-        string memory description
+        address[] calldata targets,
+        uint256[] calldata values,
+        bytes[] calldata calldatas,
+        string calldata description
     ) external returns (uint256) {
-        require(emergencyExecutors[msg.sender], "Not authorized for emergency actions");
+        if (!emergencyExecutors[msg.sender]) revert NotAuthorizedForEmergencyActions();
         
         uint256 proposalId = propose(targets, values, calldatas, description);
         proposalTypes[proposalId] = ProposalType.EMERGENCY_ACTION;
@@ -275,7 +286,7 @@ contract DIAPGovernance is
                     // 限制最大声誉投票权重，防止溢出
                     reputationVotes = sqrtReputation * 10**15;
                     // 确保不会溢出
-                    require(reputationVotes / 10**15 == sqrtReputation, "Reputation votes overflow");
+                    if (reputationVotes / 10**15 != sqrtReputation) revert ReputationVotesOverflow();
                 }
             }
         } catch {
@@ -283,7 +294,7 @@ contract DIAPGovernance is
         }
         
         // 检查总和不会溢出
-        require(tokenVotes <= type(uint256).max - reputationVotes, "Total votes overflow");
+        if (tokenVotes > type(uint256).max - reputationVotes) revert TotalVotesOverflow();
         
         return tokenVotes + reputationVotes;
     }
@@ -351,12 +362,12 @@ contract DIAPGovernance is
         uint256[] calldata values,
         bytes[] calldata calldatas
     ) external {
-        require(emergencyExecutors[msg.sender], "Not authorized for emergency actions");
+        if (!emergencyExecutors[msg.sender]) revert NotAuthorizedForEmergencyActions();
         
         // 执行紧急行动
         for (uint256 i = 0; i < targets.length; i++) {
             (bool success, ) = targets[i].call{value: values[i]}(calldatas[i]);
-            require(success, "Emergency action failed");
+            if (!success) revert EmergencyActionFailed();
         }
         
         emit EmergencyActionExecuted(msg.sender, action, block.timestamp);
@@ -387,7 +398,7 @@ contract DIAPGovernance is
      * @param _multisigWallet 多签钱包地址
      */
     function setMultisigWallet(address _multisigWallet) external onlyOwner {
-        require(_multisigWallet != address(0), "Invalid multisig wallet address");
+        if (_multisigWallet == address(0)) revert InvalidMultisigWalletAddress();
         multisigWallet = _multisigWallet;
     }
     
@@ -397,7 +408,7 @@ contract DIAPGovernance is
      * @param authorized 是否授权
      */
     function setUpgradeAuthorizer(address authorizer, bool authorized) external {
-        require(msg.sender == multisigWallet || msg.sender == owner(), "Not authorized");
+        if (msg.sender != multisigWallet && msg.sender != owner()) revert NotAuthorized();
         upgradeAuthorizers[authorizer] = authorized;
     }
     
@@ -405,12 +416,7 @@ contract DIAPGovernance is
      * @dev 检查升级权限（多签控制）
      */
     function _authorizeUpgrade(address /* newImplementation */) internal view {
-        require(
-            upgradeAuthorizers[msg.sender] || 
-            msg.sender == multisigWallet || 
-            msg.sender == owner(),
-            "Not authorized for upgrade"
-        );
+        if (!upgradeAuthorizers[msg.sender] && msg.sender != multisigWallet && msg.sender != owner()) revert NotAuthorizedForUpgrade();
         // 注意：DIAPGovernance不是UUPS合约，这里只是权限检查
     }
     

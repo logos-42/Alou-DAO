@@ -20,6 +20,31 @@ contract DIAPVerification is
     ReentrancyGuardUpgradeable
 {
     
+    // ============ Custom Errors ============
+    
+    error InvalidAgentNetworkAddress();
+    error AgentIsBlacklisted();
+    error InvalidDIDDocumentLength();
+    error InvalidPublicKeyLength();
+    error InvalidCommitment();
+    error InvalidNullifier();
+    error NullifierAlreadyUsed();
+    error TooManyFailedAttempts();
+    error SessionNotFound();
+    error SessionNotPending();
+    error SessionExpired();
+    error InvalidReputationScore();
+    error ArraysLengthMismatch();
+    error TooManyAgents();
+    error AgentAlreadyBlacklisted();
+    error AgentNotBlacklisted();
+    error NullifierNotUsed();
+    error TimeoutMustBeGreaterThanZero();
+    error AttemptsMustBeGreaterThanZero();
+    error OnlyOwnerCanVerify();
+    error OnlyZKPVerifierCanVerify();
+    error UnauthorizedVerifier();
+    
     // ============ 结构体定义 ============
     
     struct VerificationSession {
@@ -154,11 +179,11 @@ contract DIAPVerification is
      */
     modifier onlyAuthorizedVerifier() {
         if (verificationMode == VerificationMode.OWNER_MANUAL) {
-            require(msg.sender == owner(), "Only owner can verify");
+            if (msg.sender != owner()) revert OnlyOwnerCanVerify();
         } else if (verificationMode == VerificationMode.ZKP_AUTOMATED) {
-            require(msg.sender == zkpVerifier, "Only ZKP verifier can verify");
+            if (msg.sender != zkpVerifier) revert OnlyZKPVerifierCanVerify();
         } else { // HYBRID
-            require(msg.sender == owner() || msg.sender == zkpVerifier, "Unauthorized verifier");
+            if (msg.sender != owner() && msg.sender != zkpVerifier) revert UnauthorizedVerifier();
         }
         _;
     }
@@ -166,7 +191,7 @@ contract DIAPVerification is
     // ============ 初始化函数 ============
     
     function initialize(address _agentNetwork) public initializer {
-        require(_agentNetwork != address(0), "Invalid agent network address");
+        if (_agentNetwork == address(0)) revert InvalidAgentNetworkAddress();
         
         __Ownable_init();
         __UUPSUpgradeable_init();
@@ -198,18 +223,18 @@ contract DIAPVerification is
         bytes32 nullifier,
         uint256[8] calldata proof
     ) external nonReentrant returns (bytes32) {
-        require(!blacklistedAgents[msg.sender], "Agent is blacklisted");
-        require(bytes(didDocument).length > 0 && bytes(didDocument).length <= MAX_STRING_LENGTH, "Invalid DID document length");
-        require(bytes(publicKey).length > 0 && bytes(publicKey).length <= MAX_STRING_LENGTH, "Invalid public key length");
-        require(commitment != bytes32(0), "Invalid commitment");
-        require(nullifier != bytes32(0), "Invalid nullifier");
-        require(!usedNullifiers[nullifier], "Nullifier already used"); // 防止重放攻击
+        if (blacklistedAgents[msg.sender]) revert AgentIsBlacklisted();
+        if (bytes(didDocument).length == 0 || bytes(didDocument).length > MAX_STRING_LENGTH) revert InvalidDIDDocumentLength();
+        if (bytes(publicKey).length == 0 || bytes(publicKey).length > MAX_STRING_LENGTH) revert InvalidPublicKeyLength();
+        if (commitment == bytes32(0)) revert InvalidCommitment();
+        if (nullifier == bytes32(0)) revert InvalidNullifier();
+        if (usedNullifiers[nullifier]) revert NullifierAlreadyUsed(); // 防止重放攻击
         
         // 立即标记nullifier为已使用，防止重放攻击
         usedNullifiers[nullifier] = true;
         
         // 检查验证尝试次数
-        require(failedAttempts[msg.sender] < maxVerificationAttempts, "Too many failed attempts");
+        if (failedAttempts[msg.sender] >= maxVerificationAttempts) revert TooManyFailedAttempts();
         
         // 生成防碰撞的sessionId
         bytes32 sessionId = keccak256(abi.encodePacked(
@@ -249,9 +274,9 @@ contract DIAPVerification is
      */
     function verifyIdentity(bytes32 sessionId) external onlyAuthorizedVerifier returns (bool) {
         VerificationSession storage session = verificationSessions[sessionId];
-        require(session.timestamp > 0, "Session not found");
-        require(session.status == VerificationStatus.PENDING, "Session not pending");
-        require(block.timestamp <= session.timestamp + verificationTimeout, "Session expired");
+        if (session.timestamp == 0) revert SessionNotFound();
+        if (session.status != VerificationStatus.PENDING) revert SessionNotPending();
+        if (block.timestamp > session.timestamp + verificationTimeout) revert SessionExpired();
         
         // 验证ZKP证明
         uint256[8] memory proofCopy = session.proof;
@@ -318,8 +343,8 @@ contract DIAPVerification is
         uint256 reputation,
         uint256[8] calldata proof
     ) external onlyAuthorizedVerifier nonReentrant returns (bool) {
-        require(!blacklistedAgents[agent], "Agent is blacklisted");
-        require(reputation <= 10000, "Invalid reputation score");
+        if (blacklistedAgents[agent]) revert AgentIsBlacklisted();
+        if (reputation > 10000) revert InvalidReputationScore();
         
         // 调用外部ZKP验证器进行实际验证
         bool isValid = _callExternalReputationVerifier(proof, agent, reputation);
@@ -353,8 +378,8 @@ contract DIAPVerification is
         address[] calldata agents,
         uint256[8][] calldata proofs
     ) external view onlyOwner returns (bool[] memory) {
-        require(agents.length == proofs.length, "Arrays length mismatch");
-        require(agents.length <= 10, "Too many agents"); // 限制批量大小
+        if (agents.length != proofs.length) revert ArraysLengthMismatch();
+        if (agents.length > 10) revert TooManyAgents(); // 限制批量大小
         
         bool[] memory results = new bool[](agents.length);
         
@@ -392,7 +417,7 @@ contract DIAPVerification is
         string calldata behaviorType,
         string calldata /* evidence */
     ) external onlyOwner {
-        require(!blacklistedAgents[agent], "Agent already blacklisted");
+        if (blacklistedAgents[agent]) revert AgentAlreadyBlacklisted();
         
         // 根据行为类型采取不同措施
         if (keccak256(bytes(behaviorType)) == keccak256("SPAM")) {
@@ -414,7 +439,7 @@ contract DIAPVerification is
      * @param agent 智能体地址
      */
     function removeFromBlacklist(address agent) external onlyOwner {
-        require(blacklistedAgents[agent], "Agent not blacklisted");
+        if (!blacklistedAgents[agent]) revert AgentNotBlacklisted();
         
         blacklistedAgents[agent] = false;
         failedAttempts[agent] = 0;
@@ -427,7 +452,7 @@ contract DIAPVerification is
      * @param nullifier 要重置的nullifier
      */
     function resetNullifier(bytes32 nullifier) external onlyOwner {
-        require(usedNullifiers[nullifier], "Nullifier not used");
+        if (!usedNullifiers[nullifier]) revert NullifierNotUsed();
         usedNullifiers[nullifier] = false;
     }
     
@@ -531,14 +556,14 @@ contract DIAPVerification is
     }
     
     function setVerificationTimeout(uint256 _timeout) external onlyOwner {
-        require(_timeout > 0, "Timeout must be greater than 0");
+        if (_timeout == 0) revert TimeoutMustBeGreaterThanZero();
         uint256 oldTimeout = verificationTimeout;
         verificationTimeout = _timeout;
         emit VerificationTimeoutUpdated(oldTimeout, _timeout);
     }
     
     function setMaxVerificationAttempts(uint256 _attempts) external onlyOwner {
-        require(_attempts > 0, "Attempts must be greater than 0");
+        if (_attempts == 0) revert AttemptsMustBeGreaterThanZero();
         uint256 oldAttempts = maxVerificationAttempts;
         maxVerificationAttempts = _attempts;
         emit MaxVerificationAttemptsUpdated(oldAttempts, _attempts);

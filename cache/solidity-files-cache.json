@@ -2,8 +2,8 @@
   "_format": "hh-sol-cache-2",
   "files": {
     "D:\\DAO\\Smart ETH\\contracts\\DIAPAgentNetwork.sol": {
-      "lastModificationDate": 1761916355098,
-      "contentHash": "2e6c3c45b80e9044157bee888e734970",
+      "lastModificationDate": 1761917634214,
+      "contentHash": "0671a07ccb2012019192b5c1a6d91766",
       "sourceName": "contracts/DIAPAgentNetwork.sol",
       "solcConfig": {
         "version": "0.8.30",
@@ -550,8 +550,8 @@
       ]
     },
     "D:\\DAO\\Smart ETH\\contracts\\DIAPVerification.sol": {
-      "lastModificationDate": 1761912937358,
-      "contentHash": "b16da3ac7d3eed9c90d0e8a9876d803b",
+      "lastModificationDate": 1761917930029,
+      "contentHash": "ca32d3b4806f00da49d7423ed6b038ae",
       "sourceName": "contracts/DIAPVerification.sol",
       "solcConfig": {
         "version": "0.8.30",
@@ -631,8 +631,8 @@
       ]
     },
     "D:\\DAO\\Smart ETH\\contracts\\DIAPToken.sol": {
-      "lastModificationDate": 1761915769401,
-      "contentHash": "e4fc9b569c506b3b83cbfb25b1d5ad8d",
+      "lastModificationDate": 1761917677620,
+      "contentHash": "cb48374c95ede1666ec7614076a0100f",
       "sourceName": "contracts/DIAPToken.sol",
       "solcConfig": {
         "version": "0.8.30",
@@ -876,8 +876,8 @@
       ]
     },
     "D:\\DAO\\Smart ETH\\contracts\\DIAPPaymentCore.sol": {
-      "lastModificationDate": 1761916377735,
-      "contentHash": "68a408ce21c52bc2bf23558ec0763148",
+      "lastModificationDate": 1761917793867,
+      "contentHash": "03be0ac758487dce43756c2f8e9a6b5b",
       "sourceName": "contracts/DIAPPaymentCore.sol",
       "solcConfig": {
         "version": "0.8.30",
@@ -921,8 +921,8 @@
       ]
     },
     "D:\\DAO\\Smart ETH\\contracts\\DIAPPaymentPrivacy.sol": {
-      "lastModificationDate": 1761364063275,
-      "contentHash": "6737b37b076bce6c9e2f27950db710a5",
+      "lastModificationDate": 1761917851627,
+      "contentHash": "eb5a1236762773941f181199d1c9743e",
       "sourceName": "contracts/DIAPPaymentPrivacy.sol",
       "solcConfig": {
         "version": "0.8.30",
@@ -964,8 +964,8 @@
       ]
     },
     "D:\\DAO\\Smart ETH\\contracts\\DIAPPaymentChannel.sol": {
-      "lastModificationDate": 1761364063274,
-      "contentHash": "b334ba7838b65b2063a8221411a992e6",
+      "lastModificationDate": 1761917831145,
+      "contentHash": "ef78864d21e71289da9f012f1a0bc1b3",
       "sourceName": "contracts/DIAPPaymentChannel.sol",
       "solcConfig": {
         "version": "0.8.30",
@@ -1009,8 +1009,8 @@
       ]
     },
     "D:\\DAO\\Smart ETH\\contracts\\DIAPGovernance.sol": {
-      "lastModificationDate": 1761364063273,
-      "contentHash": "d5132484e191a1421a7b3efdafc4f200",
+      "lastModificationDate": 1761917749484,
+      "contentHash": "1061544587d1e5d3f1f36f6309219fb4",
       "sourceName": "contracts/DIAPGovernance.sol",
       "solcConfig": {
         "version": "0.8.30",

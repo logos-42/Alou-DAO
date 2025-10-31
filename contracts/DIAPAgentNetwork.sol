@@ -21,6 +21,50 @@ contract DIAPAgentNetwork is
     PausableUpgradeable 
 {
     
+    // ============ Custom Errors ============
+    
+    error InvalidTokenAddress();
+    error AgentAlreadyRegistered();
+    error InsufficientStakeAmount();
+    error StakeAmountTooLarge();
+    error InvalidDIDDocument();
+    error InvalidIdentifierFormat();
+    error MustUseIPNSOrIPFS();
+    error DIDAlreadyExists();
+    error InsufficientTokenBalance();
+    error InsufficientTokenAllowance();
+    error TokenTransferFailed();
+    error AgentNotRegistered();
+    error LockPeriodNotEnded();
+    error AgentAlreadyVerified();
+    error VerificationContractNotSet();
+    error InvalidZKPProof();
+    error TargetAgentNotActive();
+    error InvalidMessageCID();
+    error InvalidConsumerAddress();
+    error CannotCreateServiceForSelf();
+    error ConsumerNotActive();
+    error ConsumerNotVerified();
+    error InvalidPrice();
+    error ServiceTypeRequired();
+    error PriceTooHigh();
+    error NotServiceProvider();
+    error ServiceAlreadyCompleted();
+    error InvalidResultCID();
+    error ServiceNotFound();
+    error ServiceExpired();
+    error TotalEarningsOverflow();
+    error TotalServicesOverflow();
+    error ReputationOverflow();
+    error InsufficientContractBalance();
+    error InvalidReputationScore();
+    error FeeRateTooHigh();
+    error InvalidVerificationContractAddress();
+    error InvalidTreasuryAddress();
+    error TreasuryAddressNotSet();
+    error NoFeesToWithdraw();
+    error AgentNotActive();
+    
     // ============ 枚举定义 ============
     
     /**
@@ -184,24 +228,24 @@ contract DIAPAgentNetwork is
     // ============ 修饰符 ============
     
     modifier onlyRegisteredAgent() {
-        require(agents[msg.sender].isActive, "Agent not registered");
+        if (!agents[msg.sender].isActive) revert AgentNotRegistered();
         _;
     }
     
     modifier onlyVerifiedAgent() {
-        require(agents[msg.sender].isVerified, "Agent not verified");
+        if (!agents[msg.sender].isVerified) revert AgentNotActive();
         _;
     }
     
     modifier validReputation(uint256 reputation) {
-        require(reputation <= 10000, "Invalid reputation score");
+        if (reputation > 10000) revert InvalidReputationScore();
         _;
     }
     
     // ============ 初始化函数 ============
     
     function initialize(address _token) public initializer {
-        require(_token != address(0), "Invalid token address");
+        if (_token == address(0)) revert InvalidTokenAddress();
         
         __Ownable_init();
         __UUPSUpgradeable_init();
@@ -238,28 +282,27 @@ contract DIAPAgentNetwork is
         string calldata publicKey,
         uint256 stakedAmount
     ) external nonReentrant whenNotPaused {
-        require(!agents[msg.sender].isActive, "Agent already registered");
-        require(stakedAmount >= minStakeAmount, "Insufficient stake amount");
-        require(stakedAmount <= type(uint128).max, "Stake amount too large");
-        require(bytes(didDocument).length > 0, "Invalid DID document");
-        require(_isValidIdentifier(didDocument), "Invalid identifier format");
+        if (agents[msg.sender].isActive) revert AgentAlreadyRegistered();
+        if (stakedAmount < minStakeAmount) revert InsufficientStakeAmount();
+        if (stakedAmount > type(uint128).max) revert StakeAmountTooLarge();
+        if (bytes(didDocument).length == 0) revert InvalidDIDDocument();
+        if (!_isValidIdentifier(didDocument)) revert InvalidIdentifierFormat();
         
         // 优先使用IPNS，检查标识符类型
         IdentifierType idType = _getIdentifierType(didDocument);
-        require(idType == IdentifierType.IPNS_NAME || idType == IdentifierType.IPFS_CID, 
-                "Must use IPNS name (preferred) or IPFS CID");
+        if (idType != IdentifierType.IPNS_NAME && idType != IdentifierType.IPFS_CID) revert MustUseIPNSOrIPFS();
         
-        require(didToAgent[didDocument] == address(0), "DID already exists");
+        if (didToAgent[didDocument] != address(0)) revert DIDAlreadyExists();
         
         // 计算总费用（质押金额 + 注册费用）
         uint256 totalCost = stakedAmount + registrationFee;
         
         // 检查代币余额和授权
-        require(token.balanceOf(msg.sender) >= totalCost, "Insufficient token balance");
-        require(token.allowance(msg.sender, address(this)) >= totalCost, "Insufficient token allowance");
+        if (token.balanceOf(msg.sender) < totalCost) revert InsufficientTokenBalance();
+        if (token.allowance(msg.sender, address(this)) < totalCost) revert InsufficientTokenAllowance();
         
         // 转移代币到合约（质押 + 注册费）
-        require(token.transferFrom(msg.sender, address(this), totalCost), "Token transfer failed");
+        if (!token.transferFrom(msg.sender, address(this), totalCost)) revert TokenTransferFailed();
         
         // 累积注册费
         accumulatedFees += registrationFee;
@@ -295,8 +338,8 @@ contract DIAPAgentNetwork is
      */
     function unstakeAgent() external nonReentrant {
         Agent storage agent = agents[msg.sender];
-        require(agent.isActive, "Agent not registered");
-        require(block.timestamp >= agent.registrationTime + lockPeriod, "Lock period not ended");
+        if (!agent.isActive) revert AgentNotRegistered();
+        if (block.timestamp < agent.registrationTime + lockPeriod) revert LockPeriodNotEnded();
         
         uint256 stakedAmount = agent.stakedAmount;
         
@@ -318,7 +361,7 @@ contract DIAPAgentNetwork is
         totalStaked -= stakedAmount;
         
         // 返还质押代币
-        require(token.transfer(msg.sender, stakedAmount), "Token transfer failed");
+        if (!token.transfer(msg.sender, stakedAmount)) revert TokenTransferFailed();
         
         emit AgentUnstaked(msg.sender, stakedAmount);
     }
@@ -332,17 +375,17 @@ contract DIAPAgentNetwork is
         address agent,
         uint256[8] calldata proof
     ) external onlyOwner {
-        require(agents[agent].isActive, "Agent not registered");
-        require(!agents[agent].isVerified, "Agent already verified");
+        if (!agents[agent].isActive) revert AgentNotRegistered();
+        if (agents[agent].isVerified) revert AgentAlreadyVerified();
         
         // 调用DIAPVerification合约进行实际验证
         // 这里需要先检查verification合约是否已设置
-        require(address(verification) != address(0), "Verification contract not set");
+        if (address(verification) == address(0)) revert VerificationContractNotSet();
         
         // 通过verification合约验证身份
         // 注意：这里需要verification合约提供相应的验证接口
         bool isValid = _verifyAgentThroughVerification(agent, proof);
-        require(isValid, "Invalid ZKP proof");
+        if (!isValid) revert InvalidZKPProof();
         
         agents[agent].isVerified = true;
         agents[agent].reputation += 1000; // 验证奖励
@@ -360,15 +403,15 @@ contract DIAPAgentNetwork is
         address toAgent,
         string calldata messageCID
     ) external onlyRegisteredAgent nonReentrant {
-        require(agents[toAgent].isActive, "Target agent not active");
-        require(bytes(messageCID).length > 0, "Invalid message CID");
+        if (!agents[toAgent].isActive) revert TargetAgentNotActive();
+        if (bytes(messageCID).length == 0) revert InvalidMessageCID();
         
         // 检查代币余额和授权
-        require(token.balanceOf(msg.sender) >= messageFee, "Insufficient token balance");
-        require(token.allowance(msg.sender, address(this)) >= messageFee, "Insufficient token allowance");
+        if (token.balanceOf(msg.sender) < messageFee) revert InsufficientTokenBalance();
+        if (token.allowance(msg.sender, address(this)) < messageFee) revert InsufficientTokenAllowance();
         
         // 转移消息费用
-        require(token.transferFrom(msg.sender, address(this), messageFee), "Token transfer failed");
+        if (!token.transferFrom(msg.sender, address(this), messageFee)) revert TokenTransferFailed();
         
         // 累积消息费
         accumulatedFees += messageFee;
@@ -410,15 +453,15 @@ contract DIAPAgentNetwork is
         string calldata serviceType,
         uint256 price
     ) external onlyVerifiedAgent nonReentrant whenNotPaused {
-        require(consumer != address(0), "Invalid consumer address");
-        require(consumer != msg.sender, "Cannot create service for self");
-        require(agents[consumer].isActive, "Consumer not active");
-        require(agents[consumer].isVerified, "Consumer not verified");
-        require(price > 0, "Invalid price");
-        require(bytes(serviceType).length > 0, "Service type required");
+        if (consumer == address(0)) revert InvalidConsumerAddress();
+        if (consumer == msg.sender) revert CannotCreateServiceForSelf();
+        if (!agents[consumer].isActive) revert ConsumerNotActive();
+        if (!agents[consumer].isVerified) revert ConsumerNotVerified();
+        if (price == 0) revert InvalidPrice();
+        if (bytes(serviceType).length == 0) revert ServiceTypeRequired();
         
         // 检查服务价格是否在合理范围内
-        require(price <= 1000000 * 10**18, "Price too high"); // 最大100万代币
+        if (price > 1000000 * 10**18) revert PriceTooHigh(); // 最大100万代币
         
         uint256 serviceId = totalServices;
         services[serviceId] = Service({
@@ -446,13 +489,13 @@ contract DIAPAgentNetwork is
         string calldata resultCID
     ) external onlyVerifiedAgent nonReentrant whenNotPaused {
         Service storage service = services[serviceId];
-        require(service.provider == msg.sender, "Not service provider");
-        require(!service.isCompleted, "Service already completed");
-        require(bytes(resultCID).length > 0, "Invalid result CID");
-        require(service.timestamp > 0, "Service not found");
+        if (service.provider != msg.sender) revert NotServiceProvider();
+        if (service.isCompleted) revert ServiceAlreadyCompleted();
+        if (bytes(resultCID).length == 0) revert InvalidResultCID();
+        if (service.timestamp == 0) revert ServiceNotFound();
         
         // 检查服务是否过期（例如30天）
-        require(block.timestamp <= service.timestamp + 30 days, "Service expired");
+        if (block.timestamp > service.timestamp + 30 days) revert ServiceExpired();
         
         // 计算奖励和费用
         uint256 reward = service.price * (10000 - serviceFeeRate) / 10000;
@@ -463,9 +506,9 @@ contract DIAPAgentNetwork is
         uint256 oldReputation = agent.reputation;
         
         // 安全检查：确保不会溢出
-        require(uint256(agent.totalEarnings) + reward <= type(uint128).max, "Total earnings overflow");
-        require(agent.totalServices < type(uint32).max, "Total services overflow");
-        require(agent.reputation + 10 <= type(uint64).max, "Reputation overflow");
+        if (uint256(agent.totalEarnings) + reward > type(uint128).max) revert TotalEarningsOverflow();
+        if (agent.totalServices >= type(uint32).max) revert TotalServicesOverflow();
+        if (agent.reputation + 10 > type(uint64).max) revert ReputationOverflow();
         
         // 更新状态（Checks-Effects-Interactions 模式）
         service.isCompleted = true;
@@ -479,11 +522,11 @@ contract DIAPAgentNetwork is
         // 检查合约代币余额是否足够支付奖励
         if (token.balanceOf(address(this)) >= reward) {
             // 从合约余额支付奖励
-            require(token.transfer(msg.sender, reward), "Token transfer failed");
+            if (!token.transfer(msg.sender, reward)) revert TokenTransferFailed();
         } else {
             // 如果余额不足，需要动态铸造（需要owner权限）
             // 这里简化处理，实际应用中需要更复杂的逻辑
-            require(false, "Insufficient contract balance for rewards");
+            revert InsufficientContractBalance();
         }
         
         emit ServiceCompleted(serviceId, resultCID, reward);
@@ -685,7 +728,7 @@ contract DIAPAgentNetwork is
     }
     
     function setServiceFeeRate(uint256 _rate) external onlyOwner {
-        require(_rate <= 1000, "Fee rate too high"); // 最大10%
+        if (_rate > 1000) revert FeeRateTooHigh(); // 最大10%
         serviceFeeRate = _rate;
     }
     
@@ -698,7 +741,7 @@ contract DIAPAgentNetwork is
     }
     
     function setVerificationContract(address _verification) external onlyOwner {
-        require(_verification != address(0), "Invalid verification contract address");
+        if (_verification == address(0)) revert InvalidVerificationContractAddress();
         verification = _verification;
     }
     
@@ -707,7 +750,7 @@ contract DIAPAgentNetwork is
      * @param _treasury 金库地址
      */
     function setTreasuryAddress(address _treasury) external onlyOwner {
-        require(_treasury != address(0), "Invalid treasury address");
+        if (_treasury == address(0)) revert InvalidTreasuryAddress();
         address oldTreasury = treasuryAddress;
         treasuryAddress = _treasury;
         emit TreasuryAddressUpdated(oldTreasury, _treasury);
@@ -717,13 +760,13 @@ contract DIAPAgentNetwork is
      * @dev 提取累积的费用到金库
      */
     function withdrawFees() external onlyOwner nonReentrant {
-        require(treasuryAddress != address(0), "Treasury address not set");
-        require(accumulatedFees > 0, "No fees to withdraw");
+        if (treasuryAddress == address(0)) revert TreasuryAddressNotSet();
+        if (accumulatedFees == 0) revert NoFeesToWithdraw();
         
         uint256 amount = accumulatedFees;
         accumulatedFees = 0;
         
-        require(token.transfer(treasuryAddress, amount), "Token transfer failed");
+        if (!token.transfer(treasuryAddress, amount)) revert TokenTransferFailed();
         
         emit FeesWithdrawn(treasuryAddress, amount, block.timestamp);
     }
@@ -734,7 +777,7 @@ contract DIAPAgentNetwork is
      * @param metadataCID 元数据CID
      */
     function setAgentMetadataCID(address agent, string calldata metadataCID) external onlyOwner {
-        require(agents[agent].isActive, "Agent not active");
+        if (!agents[agent].isActive) revert AgentNotActive();
         agentMetadataCID[agent] = metadataCID;
     }
     
@@ -744,7 +787,7 @@ contract DIAPAgentNetwork is
      * @param metadataCID 元数据CID
      */
     function setServiceMetadataCID(uint256 serviceId, string calldata metadataCID) external onlyOwner {
-        require(services[serviceId].timestamp > 0, "Service not found");
+        if (services[serviceId].timestamp == 0) revert ServiceNotFound();
         serviceMetadataCID[serviceId] = metadataCID;
     }
     
@@ -788,7 +831,7 @@ contract DIAPAgentNetwork is
      * @return 标识符类型 (UNKNOWN, IPFS_CID, IPNS_NAME)
      */
     function getAgentIdentifierType(address agent) external view returns (IdentifierType) {
-        require(agents[agent].isActive, "Agent not registered");
+        if (!agents[agent].isActive) revert AgentNotRegistered();
         return _getIdentifierType(agents[agent].didDocument);
     }
     

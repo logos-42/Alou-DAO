@@ -24,6 +24,28 @@ contract DIAPToken is
     UUPSUpgradeable
 {
     
+    // ============ Custom Errors ============
+    
+    error ContractEmergencyPaused();
+    error AmountMustBeGreaterThanZero();
+    error InvalidTier();
+    error AmountBelowTierMinimum();
+    error TierChangeNotAllowed();
+    error TierMismatch();
+    error AmountExceedsTierLimit();
+    error NoStakingFound();
+    error LockPeriodNotEnded();
+    error NoRewardsToClaim();
+    error ActionNotScheduled();
+    error TimelockNotExpired();
+    error RateTooHigh();
+    error MultiplierTooLow();
+    error ExceedsMaxSupply();
+    error EmergencyWithdrawNotEnabled();
+    error TotalAllocationMismatch();
+    error InsufficientBalance();
+    error RateAdjustmentTooFrequent();
+    
     // ============ 代币配置 ============
     
     uint256 public constant MAX_SUPPLY = 1_000_000_000 * 10**18; // 10亿代币
@@ -194,7 +216,7 @@ contract DIAPToken is
         
         // 验证总分配量等于初始供应量
         uint256 totalAllocated = communityAmount + treasuryAmount + teamAmount + investorAmount + stakingAmount;
-        require(totalAllocated == INITIAL_SUPPLY, "Total allocation must equal initial supply");
+        if (totalAllocated != INITIAL_SUPPLY) revert TotalAllocationMismatch();
         
         emit InitialDistributionCompleted(
             communityAmount,
@@ -243,12 +265,12 @@ contract DIAPToken is
      * @param tier 质押层级
      */
     function stake(uint256 amount, uint256 tier) external nonReentrant whenNotPaused {
-        require(!emergencyPaused, "Contract is emergency paused");
-        require(amount > 0, "Amount must be greater than 0");
-        require(tier <= TIER_PLATINUM, "Invalid tier");
+        if (emergencyPaused) revert ContractEmergencyPaused();
+        if (amount == 0) revert AmountMustBeGreaterThanZero();
+        if (tier > TIER_PLATINUM) revert InvalidTier();
         
         StakingTier memory tierInfo = stakingTiers[tier];
-        require(amount >= tierInfo.minAmount, "Amount below tier minimum");
+        if (amount < tierInfo.minAmount) revert AmountBelowTierMinimum();
         
         StakingInfo storage info = stakingInfo[msg.sender];
         
@@ -264,12 +286,12 @@ contract DIAPToken is
             uint256 newTier = _getStakingTier(newTotalAmount);
             
             // 不允许层级跳跃
-            require(newTier == currentTier, "Tier change not allowed for additional stake");
-            require(newTier == tier, "Tier mismatch");
+            if (newTier != currentTier) revert TierChangeNotAllowed();
+            if (newTier != tier) revert TierMismatch();
             
             // 检查是否超过当前层级的最大限制
             if (tier < TIER_PLATINUM) {
-                require(newTotalAmount < stakingTiers[tier + 1].minAmount, "Amount exceeds current tier limit");
+                if (newTotalAmount >= stakingTiers[tier + 1].minAmount) revert AmountExceedsTierLimit();
             }
             
             // 更新质押信息
@@ -296,11 +318,8 @@ contract DIAPToken is
      */
     function unstake() external nonReentrant {
         StakingInfo storage info = stakingInfo[msg.sender];
-        require(info.amount > 0, "No staking found");
-        require(
-            block.timestamp >= info.startTime + info.lockPeriod,
-            "Lock period not ended"
-        );
+        if (info.amount == 0) revert NoStakingFound();
+        if (block.timestamp < info.startTime + info.lockPeriod) revert LockPeriodNotEnded();
         
         // 计算奖励
         uint256 rewards = _calculateRewards(msg.sender);
@@ -325,10 +344,10 @@ contract DIAPToken is
      */
     function claimRewards() external nonReentrant {
         StakingInfo storage info = stakingInfo[msg.sender];
-        require(info.amount > 0, "No staking found");
+        if (info.amount == 0) revert NoStakingFound();
         
         uint256 rewards = _calculateRewards(msg.sender);
-        require(rewards > 0, "No rewards to claim");
+        if (rewards == 0) revert NoRewardsToClaim();
         
         // 更新领取时间
         info.lastClaimTime = block.timestamp;
@@ -418,7 +437,7 @@ contract DIAPToken is
      * 当合约余额充足时，适当提高奖励率
      */
     function _adjustRewardRate() internal {
-        require(block.timestamp >= lastRateAdjustment + RATE_ADJUSTMENT_INTERVAL, "Rate adjustment too frequent");
+        if (block.timestamp < lastRateAdjustment + RATE_ADJUSTMENT_INTERVAL) revert RateAdjustmentTooFrequent();
         
         uint256 contractBalance = balanceOf(address(this));
         uint256 totalStakedAmount = totalStaked;
@@ -484,8 +503,8 @@ contract DIAPToken is
      * @param reason 燃烧原因
      */
     function burnTokens(uint256 amount, string calldata reason) external {
-        require(amount > 0, "Amount must be greater than 0");
-        require(balanceOf(msg.sender) >= amount, "Insufficient balance");
+        if (amount == 0) revert AmountMustBeGreaterThanZero();
+        if (balanceOf(msg.sender) < amount) revert InsufficientBalance();
         
         _burn(msg.sender, amount);
         totalBurned += amount;
@@ -523,10 +542,10 @@ contract DIAPToken is
      */
     function setStakingRewardRate(uint256 _rate) external onlyOwner {
         bytes32 actionHash = keccak256(abi.encodePacked("setStakingRewardRate", _rate));
-        require(pendingActions[actionHash] != 0, "Action not scheduled");
-        require(pendingActions[actionHash] <= block.timestamp, "Timelock not expired");
+        if (pendingActions[actionHash] == 0) revert ActionNotScheduled();
+        if (pendingActions[actionHash] > block.timestamp) revert TimelockNotExpired();
         
-        require(_rate <= MAX_REWARD_RATE, "Rate too high");
+        if (_rate > MAX_REWARD_RATE) revert RateTooHigh();
         stakingRewardRate = _rate;
         delete pendingActions[actionHash];
         
@@ -539,7 +558,7 @@ contract DIAPToken is
      * @param _rate 新的奖励率
      */
     function scheduleRewardRateChange(uint256 _rate) external onlyOwner {
-        require(_rate <= MAX_REWARD_RATE, "Rate too high");
+        if (_rate > MAX_REWARD_RATE) revert RateTooHigh();
         bytes32 actionHash = keccak256(abi.encodePacked("setStakingRewardRate", _rate));
         pendingActions[actionHash] = block.timestamp + TIMELOCK_DELAY;
         emit ActionScheduled(actionHash, block.timestamp + TIMELOCK_DELAY);
@@ -550,7 +569,7 @@ contract DIAPToken is
      * @param _rate 燃烧率 (基点，例如25 = 0.25%)
      */
     function setBurnRate(uint256 _rate) external onlyOwner {
-        require(_rate <= 100, "Rate too high"); // 最大1%
+        if (_rate > 100) revert RateTooHigh(); // 最大1%
         burnRate = _rate;
         emit BurnRateUpdated(_rate);
     }
@@ -568,8 +587,8 @@ contract DIAPToken is
         uint256 multiplier,
         uint256 lockPeriod
     ) external onlyOwner {
-        require(tier <= TIER_PLATINUM, "Invalid tier");
-        require(multiplier >= 10000, "Multiplier too low"); // 最小1x
+        if (tier > TIER_PLATINUM) revert InvalidTier();
+        if (multiplier < 10000) revert MultiplierTooLow(); // 最小1x
         
         stakingTiers[tier] = StakingTier({
             minAmount: minAmount,
@@ -586,7 +605,7 @@ contract DIAPToken is
      * @param amount 数量
      */
     function mint(address to, uint256 amount) external onlyOwner {
-        require(totalSupply() + amount <= MAX_SUPPLY, "Exceeds max supply");
+        if (totalSupply() + amount > MAX_SUPPLY) revert ExceedsMaxSupply();
         _mint(to, amount);
     }
     
@@ -630,9 +649,9 @@ contract DIAPToken is
      * @dev 紧急提取质押代币
      */
     function emergencyWithdraw() external {
-        require(emergencyWithdrawEnabled, "Emergency withdraw not enabled");
+        if (!emergencyWithdrawEnabled) revert EmergencyWithdrawNotEnabled();
         StakingInfo storage info = stakingInfo[msg.sender];
-        require(info.amount > 0, "No staking found");
+        if (info.amount == 0) revert NoStakingFound();
         
         uint256 amount = info.amount;
         delete stakingInfo[msg.sender];

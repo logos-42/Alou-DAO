@@ -20,6 +20,33 @@ contract DIAPPaymentChannel is
     ReentrancyGuardUpgradeable,
     PausableUpgradeable
 {
+    // ============ Custom Errors ============
+    
+    error DepositMustBeGreaterThanZero();
+    error ChannelIDRequired();
+    error ChannelAlreadyExists();
+    error CannotOpenChannelWithSelf();
+    error InvalidParticipantAddress();
+    error SenderNotRegistered();
+    error Participant2NotRegistered();
+    error InsufficientBalance();
+    error InsufficientAllowance();
+    error TransferFailed();
+    error ChannelNotFound();
+    error ChannelNotActive();
+    error NotChannelParticipant();
+    error NonceMustBeGreater();
+    error InvalidBalanceDistribution();
+    error InvalidSignatures();
+    error NoActiveChallengePerio();
+    error ChallengePeriodExpired();
+    error NewNonceMustBeGreater();
+    error ChallengePeriodNotEnded();
+    error InsufficientFunds();
+    error TransferToParticipant1Failed();
+    error TransferToParticipant2Failed();
+    error RateTooHigh();
+    
     // ============ 结构体定义 ============
 
     struct PaymentChannel {
@@ -106,20 +133,17 @@ contract DIAPPaymentChannel is
         uint256 deposit,
         string calldata channelId
     ) external nonReentrant whenNotPaused {
-        require(deposit > 0, "Deposit must be greater than 0");
-        require(bytes(channelId).length > 0, "Channel ID required");
-        require(paymentChannels[channelId].lastUpdate == 0, "Channel already exists");
-        require(participant2 != msg.sender, "Cannot open channel with self");
-        require(participant2 != address(0), "Invalid participant address");
+        if (deposit == 0) revert DepositMustBeGreaterThanZero();
+        if (bytes(channelId).length == 0) revert ChannelIDRequired();
+        if (paymentChannels[channelId].lastUpdate != 0) revert ChannelAlreadyExists();
+        if (participant2 == msg.sender) revert CannotOpenChannelWithSelf();
+        if (participant2 == address(0)) revert InvalidParticipantAddress();
 
-        require(agentNetwork.getAgent(msg.sender).isActive, "Sender not registered");
-        require(agentNetwork.getAgent(participant2).isActive, "Participant2 not registered");
+        if (!agentNetwork.getAgent(msg.sender).isActive) revert SenderNotRegistered();
+        if (!agentNetwork.getAgent(participant2).isActive) revert Participant2NotRegistered();
 
-        require(token.balanceOf(msg.sender) >= deposit, "Insufficient balance");
-        require(
-            token.allowance(msg.sender, address(this)) >= deposit,
-            "Insufficient allowance"
-        );
+        if (token.balanceOf(msg.sender) < deposit) revert InsufficientBalance();
+        if (token.allowance(msg.sender, address(this)) < deposit) revert InsufficientAllowance();
 
         paymentChannels[channelId] = PaymentChannel({
             participant1: msg.sender,
@@ -134,7 +158,7 @@ contract DIAPPaymentChannel is
             channelId: channelId
         });
 
-        require(token.transferFrom(msg.sender, address(this), deposit), "Transfer failed");
+        if (!token.transferFrom(msg.sender, address(this), deposit)) revert TransferFailed();
 
         emit PaymentChannelOpened(channelId, msg.sender, participant2, deposit);
     }
@@ -148,21 +172,14 @@ contract DIAPPaymentChannel is
         bytes calldata signature2
     ) external nonReentrant whenNotPaused {
         PaymentChannel storage channel = paymentChannels[channelId];
-        require(channel.lastUpdate > 0, "Channel not found");
-        require(channel.isActive, "Channel not active");
-        require(
-            msg.sender == channel.participant1 || msg.sender == channel.participant2,
-            "Not channel participant"
-        );
+        if (channel.lastUpdate == 0) revert ChannelNotFound();
+        if (!channel.isActive) revert ChannelNotActive();
+        if (msg.sender != channel.participant1 && msg.sender != channel.participant2) revert NotChannelParticipant();
 
-        require(nonce > channel.nonce, "Nonce must be greater than current");
-        require(
-            finalBalance1 + finalBalance2 <= channel.totalDeposited,
-            "Invalid balance distribution"
-        );
+        if (nonce <= channel.nonce) revert NonceMustBeGreater();
+        if (finalBalance1 + finalBalance2 > channel.totalDeposited) revert InvalidBalanceDistribution();
 
-        require(
-            _verifyChannelSignatures(
+        if (!_verifyChannelSignatures(
                 channelId,
                 finalBalance1,
                 finalBalance2,
@@ -171,9 +188,7 @@ contract DIAPPaymentChannel is
                 channel.participant2,
                 signature1,
                 signature2
-            ),
-            "Invalid signatures"
-        );
+            )) revert InvalidSignatures();
 
         channel.balance1 = finalBalance1;
         channel.balance2 = finalBalance2;
@@ -192,23 +207,16 @@ contract DIAPPaymentChannel is
         bytes calldata signature2
     ) external nonReentrant whenNotPaused {
         PaymentChannel storage channel = paymentChannels[channelId];
-        require(channel.lastUpdate > 0, "Channel not found");
-        require(channel.isActive, "Channel not active");
-        require(channel.challengeDeadline > 0, "No active challenge period");
-        require(block.timestamp < channel.challengeDeadline, "Challenge period expired");
-        require(
-            msg.sender == channel.participant1 || msg.sender == channel.participant2,
-            "Not channel participant"
-        );
+        if (channel.lastUpdate == 0) revert ChannelNotFound();
+        if (!channel.isActive) revert ChannelNotActive();
+        if (channel.challengeDeadline == 0) revert NoActiveChallengePerio();
+        if (block.timestamp >= channel.challengeDeadline) revert ChallengePeriodExpired();
+        if (msg.sender != channel.participant1 && msg.sender != channel.participant2) revert NotChannelParticipant();
 
-        require(newNonce > channel.nonce, "New nonce must be greater");
-        require(
-            newBalance1 + newBalance2 <= channel.totalDeposited,
-            "Invalid balance distribution"
-        );
+        if (newNonce <= channel.nonce) revert NewNonceMustBeGreater();
+        if (newBalance1 + newBalance2 > channel.totalDeposited) revert InvalidBalanceDistribution();
 
-        require(
-            _verifyChannelSignatures(
+        if (!_verifyChannelSignatures(
                 channelId,
                 newBalance1,
                 newBalance2,
@@ -217,9 +225,7 @@ contract DIAPPaymentChannel is
                 channel.participant2,
                 signature1,
                 signature2
-            ),
-            "Invalid signatures"
-        );
+            )) revert InvalidSignatures();
 
         channel.balance1 = newBalance1;
         channel.balance2 = newBalance2;
@@ -230,26 +236,20 @@ contract DIAPPaymentChannel is
 
     function finalizeChannelClose(string calldata channelId) external nonReentrant {
         PaymentChannel storage channel = paymentChannels[channelId];
-        require(channel.lastUpdate > 0, "Channel not found");
-        require(channel.isActive, "Channel not active");
-        require(channel.challengeDeadline > 0, "No active challenge period");
-        require(block.timestamp >= channel.challengeDeadline, "Challenge period not ended");
+        if (channel.lastUpdate == 0) revert ChannelNotFound();
+        if (!channel.isActive) revert ChannelNotActive();
+        if (channel.challengeDeadline == 0) revert NoActiveChallengePerio();
+        if (block.timestamp < channel.challengeDeadline) revert ChallengePeriodNotEnded();
 
         uint256 fee = (channel.totalDeposited * channelFeeRate) / 10000;
         uint256 totalToDistribute = channel.balance1 + channel.balance2;
-        require(totalToDistribute + fee <= channel.totalDeposited, "Insufficient funds");
+        if (totalToDistribute + fee > channel.totalDeposited) revert InsufficientFunds();
 
         if (channel.balance1 > 0) {
-            require(
-                token.transfer(channel.participant1, channel.balance1),
-                "Transfer to participant1 failed"
-            );
+            if (!token.transfer(channel.participant1, channel.balance1)) revert TransferToParticipant1Failed();
         }
         if (channel.balance2 > 0) {
-            require(
-                token.transfer(channel.participant2, channel.balance2),
-                "Transfer to participant2 failed"
-            );
+            if (!token.transfer(channel.participant2, channel.balance2)) revert TransferToParticipant2Failed();
         }
 
         channel.isActive = false;
@@ -319,7 +319,7 @@ contract DIAPPaymentChannel is
     // ============ 管理函数 ============
 
     function setChannelFeeRate(uint256 _rate) external onlyOwner {
-        require(_rate <= 100, "Rate too high");
+        if (_rate > 100) revert RateTooHigh();
         channelFeeRate = _rate;
     }
 

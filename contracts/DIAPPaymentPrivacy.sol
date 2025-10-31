@@ -17,6 +17,22 @@ contract DIAPPaymentPrivacy is
     OwnableUpgradeable,
     ReentrancyGuardUpgradeable
 {
+    // ============ Custom Errors ============
+    
+    error AmountMustBeGreaterThanZero();
+    error InvalidCommitment();
+    error CommitmentAlreadyExists();
+    error InsufficientBalance();
+    error InsufficientAllowance();
+    error TokenTransferFailed();
+    error CommitmentAlreadyUsed();
+    error NullifierAlreadyUsed();
+    error InsufficientLockedFunds();
+    error InvalidPrivacyProof();
+    error NoLockedFunds();
+    error NotCommitmentOwner();
+    error NotExpiredYet();
+    
     // ============ 状态变量 ============
 
     DIAPToken public token;
@@ -58,20 +74,14 @@ contract DIAPPaymentPrivacy is
     // ============ 隐私支付功能 ============
 
     function lockFundsForPrivacy(bytes32 commitment, uint256 amount) external nonReentrant {
-        require(amount > 0, "Amount must be greater than 0");
-        require(commitment != bytes32(0), "Invalid commitment");
-        require(commitmentPools[commitment] == 0, "Commitment already exists");
+        if (amount == 0) revert AmountMustBeGreaterThanZero();
+        if (commitment == bytes32(0)) revert InvalidCommitment();
+        if (commitmentPools[commitment] != 0) revert CommitmentAlreadyExists();
 
-        require(token.balanceOf(msg.sender) >= amount, "Insufficient balance");
-        require(
-            token.allowance(msg.sender, address(this)) >= amount,
-            "Insufficient allowance"
-        );
+        if (token.balanceOf(msg.sender) < amount) revert InsufficientBalance();
+        if (token.allowance(msg.sender, address(this)) < amount) revert InsufficientAllowance();
 
-        require(
-            token.transferFrom(msg.sender, address(this), amount),
-            "Token transfer failed"
-        );
+        if (!token.transferFrom(msg.sender, address(this), amount)) revert TokenTransferFailed();
 
         commitmentPools[commitment] = amount;
         commitmentOwners[commitment] = msg.sender;
@@ -87,22 +97,19 @@ contract DIAPPaymentPrivacy is
         address to,
         uint256 amount
     ) external nonReentrant {
-        require(!usedCommitments[commitment], "Commitment already used");
-        require(!usedNullifiers[nullifier], "Nullifier already used");
-        require(amount > 0, "Amount must be greater than 0");
-        require(commitmentPools[commitment] >= amount, "Insufficient locked funds");
+        if (usedCommitments[commitment]) revert CommitmentAlreadyUsed();
+        if (usedNullifiers[nullifier]) revert NullifierAlreadyUsed();
+        if (amount == 0) revert AmountMustBeGreaterThanZero();
+        if (commitmentPools[commitment] < amount) revert InsufficientLockedFunds();
 
-        require(
-            _verifyPrivacyProof(proof, commitment, nullifier, to, amount),
-            "Invalid privacy proof"
-        );
+        if (!_verifyPrivacyProof(proof, commitment, nullifier, to, amount)) revert InvalidPrivacyProof();
 
         usedCommitments[commitment] = true;
         usedNullifiers[nullifier] = true;
 
         commitmentPools[commitment] -= amount;
 
-        require(token.transfer(to, amount), "Token transfer failed");
+        if (!token.transfer(to, amount)) revert TokenTransferFailed();
 
         emit PrivacyPaymentExecuted(commitment, to, amount);
     }
@@ -111,15 +118,15 @@ contract DIAPPaymentPrivacy is
         uint256 lockedAmount = commitmentPools[commitment];
         address owner = commitmentOwners[commitment];
 
-        require(lockedAmount > 0, "No locked funds");
-        require(!usedCommitments[commitment], "Commitment already used");
-        require(owner == msg.sender, "Not commitment owner");
+        if (lockedAmount == 0) revert NoLockedFunds();
+        if (usedCommitments[commitment]) revert CommitmentAlreadyUsed();
+        if (owner != msg.sender) revert NotCommitmentOwner();
 
         commitmentPools[commitment] = 0;
         delete commitmentOwners[commitment];
         delete commitmentTimestamps[commitment];
 
-        require(token.transfer(msg.sender, lockedAmount), "Token transfer failed");
+        if (!token.transfer(msg.sender, lockedAmount)) revert TokenTransferFailed();
 
         emit FundsWithdrawn(commitment, lockedAmount, msg.sender);
     }
@@ -129,18 +136,15 @@ contract DIAPPaymentPrivacy is
         address owner = commitmentOwners[commitment];
         uint256 lockTime = commitmentTimestamps[commitment];
 
-        require(lockedAmount > 0, "No locked funds");
-        require(!usedCommitments[commitment], "Commitment already used");
-        require(
-            block.timestamp >= lockTime + PRIVACY_PAYMENT_TIMEOUT,
-            "Not expired yet"
-        );
+        if (lockedAmount == 0) revert NoLockedFunds();
+        if (usedCommitments[commitment]) revert CommitmentAlreadyUsed();
+        if (block.timestamp < lockTime + PRIVACY_PAYMENT_TIMEOUT) revert NotExpiredYet();
 
         commitmentPools[commitment] = 0;
         delete commitmentOwners[commitment];
         delete commitmentTimestamps[commitment];
 
-        require(token.transfer(owner, lockedAmount), "Token transfer failed");
+        if (!token.transfer(owner, lockedAmount)) revert TokenTransferFailed();
 
         emit FundsWithdrawn(commitment, lockedAmount, owner);
     }

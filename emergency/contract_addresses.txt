@@ -120,7 +120,7 @@ Base Sepolia Basescan: https://sepolia.basescan.org
 --- 最后更新 ---
 
 日期: 2025-11-01
-版本: v1.1.0 (包含ERC-4337)
+版本: v0.4.0 (包含ERC-4337)
 状态: 测试网部署完成
 
 === 使用说明 ===

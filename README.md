@@ -6,7 +6,7 @@
 
 DIAP 是一个去中心化智能体网络协议，为 AI 智能体提供身份、支付、通信和治理的完整基础设施。现已集成 ERC-4337 账户抽象标准，为智能体提供更安全、更灵活的链上钱包解决方案。
 
-## ✨ 最新更新 (v1.1.0)
+## ✨ 最新更新 (v0.4.0)
 
 - 🆕 **ERC-4337 集成**: 完整的账户抽象支持（DIAPAccount, DIAPAccountFactory, DIAPPaymaster）
 - 🔐 **Session Key 管理**: 智能体临时授权密钥，支持限额和过期控制
@@ -67,47 +67,6 @@ DIAP 是一个去中心化智能体网络协议，为 AI 智能体提供身份�
 | DIAPPaymaster | [0xA960cf9053FA76278e16f9D4BA35225f7634DC54](https://sepolia.etherscan.io/address/0xA960cf9053FA76278e16f9D4BA35225f7634DC54) | Etherscan |
 
 **完整部署信息**: 查看 [emergency/contract_addresses.txt](./emergency/contract_addresses.txt)
-
-## 🛠️ 快速开始
-
-### 安装
-
-```bash
-npm install
-```
-
-### 编译
-
-```bash
-npx hardhat compile
-```
-
-### 测试
-
-```bash
-# 运行所有测试
-npx hardhat test
-
-# 运行 ERC-4337 集成测试
-npx hardhat test tests/DIAPAccount.test.js
-```
-
-### 部署
-
-```bash
-# 部署所有合约到 Sepolia
-npx hardhat run scripts/deploy_full_to_testnet.js --network sepolia
-
-# 部署 ERC-4337 合约
-npx hardhat run scripts/deploy-aa.js --network sepolia
-```
-
-### 健康检查
-
-```bash
-# 检查 Sepolia 部署状态
-npx hardhat run scripts/monitoring/health_check.js --network sepolia
-```
 
 ## 📊 代币经济
 
@@ -234,6 +193,6 @@ MIT License
 
 ⚠️ **注意**: 这是一个实验性项目，请在生产环境使用前进行充分测试和审计。
 
-**版本**: v1.1.0  
+**版本**: v0.4.0  
 **最后更新**: 2025-11-01  
 **部署网络**: Sepolia Testnet (Chain ID: 11155111)

@@ -91,6 +91,9 @@ contract DIAPAgentNetwork is
         uint32 totalServices;     // 提供服务次数 (打包优化)
         bool isActive;            // 是否活跃 (打包优化)
         bool isVerified;          // 是否通过ZKP验证 (打包优化)
+        // ERC-4337 支持
+        address aaAccount;        // ERC-4337 账户地址
+        bool isAAAccount;         // 是否使用 AA 账户
     }
     
     struct Message {
@@ -116,6 +119,7 @@ contract DIAPAgentNetwork is
     
     IERC20 public token; // DIAP代币合约
     address public verification; // DIAPVerification合约地址
+    address public accountFactory; // DIAPAccountFactory合约地址
     
     mapping(address => Agent) public agents;
     mapping(string => address) public didToAgent;  // DID标识符到地址映射 (支持IPNS名称和IPFS CID)
@@ -225,6 +229,17 @@ contract DIAPAgentNetwork is
         address indexed newAddress
     );
     
+    event AAAccountCreated(
+        address indexed agent,
+        address indexed aaAccount,
+        uint256 timestamp
+    );
+    
+    event AccountFactoryUpdated(
+        address indexed oldFactory,
+        address indexed newFactory
+    );
+    
     // ============ 修饰符 ============
     
     modifier onlyRegisteredAgent() {
@@ -270,7 +285,7 @@ contract DIAPAgentNetwork is
     // ============ 智能体管理 ============
     
     /**
-     * @dev 注册智能体
+     * @dev 注册智能体（传统 EOA 方式）
      * @param didDocument DID文档标识符 (推荐使用IPNS名称，兼容IPFS CID)
      *                    IPNS名称是不变的根域名，内容更新时无需修改链上标识符
      *                    示例: k51qzi5uqu5dlvj2baxnqndepeb86cbk3ng7n3i46uzyxzyqj2xjonzllnv0v8
@@ -282,7 +297,53 @@ contract DIAPAgentNetwork is
         string calldata publicKey,
         uint256 stakedAmount
     ) external nonReentrant whenNotPaused {
-        if (agents[msg.sender].isActive) revert AgentAlreadyRegistered();
+        _registerAgent(msg.sender, didDocument, publicKey, stakedAmount, address(0), false);
+    }
+    
+    /**
+     * @dev 注册智能体（ERC-4337 AA 账户方式）
+     * @param didDocument DID文档标识符
+     * @param publicKey 公钥
+     * @param stakedAmount 质押代币数量
+     * @param salt 用于创建 AA 账户的盐值
+     */
+    function registerAgentWithAA(
+        string calldata didDocument,
+        string calldata publicKey,
+        uint256 stakedAmount,
+        uint256 salt
+    ) external nonReentrant whenNotPaused returns (address aaAccount) {
+        require(accountFactory != address(0), "Account factory not set");
+        
+        // 调用工厂创建 AA 账户
+        // solhint-disable-next-line avoid-low-level-calls
+        (bool success, bytes memory data) = accountFactory.call(
+            abi.encodeWithSignature("createAccount(address,uint256)", msg.sender, salt)
+        );
+        require(success, "Failed to create AA account");
+        // createAccount 返回 DIAPAccount 合约实例，需要转换为地址
+        aaAccount = address(abi.decode(data, (address)));
+        
+        // 注册智能体
+        _registerAgent(msg.sender, didDocument, publicKey, stakedAmount, aaAccount, true);
+        
+        emit AAAccountCreated(msg.sender, aaAccount, block.timestamp);
+        
+        return aaAccount;
+    }
+    
+    /**
+     * @dev 内部注册函数
+     */
+    function _registerAgent(
+        address agentAddress,
+        string calldata didDocument,
+        string calldata publicKey,
+        uint256 stakedAmount,
+        address aaAccount,
+        bool isAA
+    ) internal {
+        if (agents[agentAddress].isActive) revert AgentAlreadyRegistered();
         if (stakedAmount < minStakeAmount) revert InsufficientStakeAmount();
         if (stakedAmount > type(uint128).max) revert StakeAmountTooLarge();
         if (bytes(didDocument).length == 0) revert InvalidDIDDocument();
@@ -297,40 +358,46 @@ contract DIAPAgentNetwork is
         // 计算总费用（质押金额 + 注册费用）
         uint256 totalCost = stakedAmount + registrationFee;
         
+        // 确定代币转移的目标地址
+        address tokenDestination = isAA ? aaAccount : address(this);
+        
         // 检查代币余额和授权
         if (token.balanceOf(msg.sender) < totalCost) revert InsufficientTokenBalance();
         if (token.allowance(msg.sender, address(this)) < totalCost) revert InsufficientTokenAllowance();
         
-        // 转移代币到合约（质押 + 注册费）
-        if (!token.transferFrom(msg.sender, address(this), totalCost)) revert TokenTransferFailed();
-        
-        // 累积注册费
+        // 转移注册费到合约
+        if (!token.transferFrom(msg.sender, address(this), registrationFee)) revert TokenTransferFailed();
         accumulatedFees += registrationFee;
         
-        // 创建智能体 (Gas优化: 不显式设置默认值)
-        agents[msg.sender] = Agent({
+        // 转移质押代币（EOA 到合约，AA 到 AA 账户）
+        if (!token.transferFrom(msg.sender, tokenDestination, stakedAmount)) revert TokenTransferFailed();
+        
+        // 创建智能体
+        agents[agentAddress] = Agent({
             didDocument: didDocument,
             publicKey: publicKey,
             stakedAmount: uint128(stakedAmount),
-            totalEarnings: 0,  // 显式设置以避免混淆
-            reputation: 1000,  // 初始声誉
+            totalEarnings: 0,
+            reputation: 1000,
             registrationTime: uint64(block.timestamp),
             lastActivity: uint64(block.timestamp),
-            totalServices: 0,  // 显式设置以避免混淆
+            totalServices: 0,
             isActive: true,
-            isVerified: false
+            isVerified: false,
+            aaAccount: aaAccount,
+            isAAAccount: isAA
         });
         
-        didToAgent[didDocument] = msg.sender;
+        didToAgent[didDocument] = agentAddress;
         
         // Gas优化：维护可枚举列表
-        agentIndex[msg.sender] = agentList.length;
-        agentList.push(msg.sender);
+        agentIndex[agentAddress] = agentList.length;
+        agentList.push(agentAddress);
         
         totalAgents++;
         totalStaked += stakedAmount;
         
-        emit AgentRegistered(msg.sender, didDocument, stakedAmount);
+        emit AgentRegistered(agentAddress, didDocument, stakedAmount);
     }
     
     /**
@@ -603,14 +670,14 @@ contract DIAPAgentNetwork is
         
         // 检查是否以有效前缀开头
         if (len >= 2) {
-            // CIDv0: Qm
-            if (b[0] == 'Q' && b[1] == 'm') return true;
+            // CIDv0: Qm (0x51, 0x6d)
+            if (b[0] == 0x51 && b[1] == 0x6d) return true;
             
-            // CIDv1: bafy, bafk, bafz
-            if (len >= 4 && b[0] == 'b' && b[1] == 'a' && b[2] == 'f') return true;
+            // CIDv1: bafy, bafk, bafz (0x62, 0x61, 0x66)
+            if (len >= 4 && b[0] == 0x62 && b[1] == 0x61 && b[2] == 0x66) return true;
             
-            // IPNS: k (base36编码的PeerID)
-            if (b[0] == 'k' && len >= 50) return true;
+            // IPNS: k (base36编码的PeerID) (0x6b)
+            if (b[0] == 0x6b && len >= 50) return true;
         }
         
         return false;
@@ -627,14 +694,14 @@ contract DIAPAgentNetwork is
         
         if (len < 2) return IdentifierType.UNKNOWN;
         
-        // IPNS 名称检测 (k开头，长度50-65)
-        if (b[0] == 'k' && len >= 50 && len <= 65) {
+        // IPNS 名称检测 (k开头，长度50-65) (0x6b)
+        if (b[0] == 0x6b && len >= 50 && len <= 65) {
             return IdentifierType.IPNS_NAME;
         }
         
-        // IPFS CID 检测
-        if ((b[0] == 'Q' && b[1] == 'm') || 
-            (len >= 4 && b[0] == 'b' && b[1] == 'a' && b[2] == 'f')) {
+        // IPFS CID 检测 (Q=0x51, m=0x6d, b=0x62, a=0x61, f=0x66)
+        if ((b[0] == 0x51 && b[1] == 0x6d) || 
+            (len >= 4 && b[0] == 0x62 && b[1] == 0x61 && b[2] == 0x66)) {
             return IdentifierType.IPFS_CID;
         }
         
@@ -675,7 +742,7 @@ contract DIAPAgentNetwork is
         
         uint256 processedRewards = 0;
         
-        for (uint256 i = startIndex; i < endIndex; i++) {
+        for (uint256 i = startIndex; i < endIndex;) {
             address agentAddr = agentList[i];
             Agent storage agent = agents[agentAddr];
             
@@ -687,6 +754,9 @@ contract DIAPAgentNetwork is
                     // 为了简化，这里只是记录
                     processedRewards += agentReward;
                 }
+            }
+            unchecked {
+                ++i;  // Gas 优化
             }
         }
         
@@ -743,6 +813,17 @@ contract DIAPAgentNetwork is
     function setVerificationContract(address _verification) external onlyOwner {
         if (_verification == address(0)) revert InvalidVerificationContractAddress();
         verification = _verification;
+    }
+    
+    /**
+     * @dev 设置账户工厂地址
+     * @param _factory 工厂地址
+     */
+    function setAccountFactory(address _factory) external onlyOwner {
+        require(_factory != address(0), "Invalid factory address");
+        address oldFactory = accountFactory;
+        accountFactory = _factory;
+        emit AccountFactoryUpdated(oldFactory, _factory);
     }
     
     /**
@@ -833,6 +914,59 @@ contract DIAPAgentNetwork is
     function getAgentIdentifierType(address agent) external view returns (IdentifierType) {
         if (!agents[agent].isActive) revert AgentNotRegistered();
         return _getIdentifierType(agents[agent].didDocument);
+    }
+    
+    /**
+     * @dev 获取智能体的 AA 账户地址
+     * @param agent 智能体地址
+     * @return AA 账户地址（如果没有则返回 address(0)）
+     */
+    function getAgentAAAccount(address agent) external view returns (address) {
+        return agents[agent].aaAccount;
+    }
+    
+    /**
+     * @dev 检查智能体是否使用 AA 账户
+     * @param agent 智能体地址
+     * @return 是否使用 AA 账户
+     */
+    function isAgentUsingAA(address agent) external view returns (bool) {
+        return agents[agent].isAAAccount;
+    }
+    
+    /**
+     * @dev 获取智能体的代币余额（支持 AA 账户）
+     * @param agent 智能体地址
+     * @return 代币余额
+     */
+    function getAgentTokenBalance(address agent) external view returns (uint256) {
+        if (!agents[agent].isActive) revert AgentNotRegistered();
+        
+        if (agents[agent].isAAAccount && agents[agent].aaAccount != address(0)) {
+            // 如果是 AA 账户，返回 AA 账户的余额
+            return token.balanceOf(agents[agent].aaAccount);
+        } else {
+            // 如果是 EOA，返回 EOA 的余额
+            return token.balanceOf(agent);
+        }
+    }
+    
+    /**
+     * @dev 验证调用者（支持 AA 账户）
+     * @param agent 智能体地址
+     * @param caller 调用者地址
+     * @return 是否有效
+     */
+    function isValidCaller(address agent, address caller) external view returns (bool) {
+        if (!agents[agent].isActive) return false;
+        
+        // 如果是 EOA，调用者必须是智能体本身
+        if (!agents[agent].isAAAccount) {
+            return caller == agent;
+        }
+        
+        // 如果是 AA 账户，调用者可以是 AA 账户或智能体本身
+        return caller == agents[agent].aaAccount || caller == agent;
     }
     
     

@@ -365,9 +365,12 @@ contract DIAPGovernance is
         if (!emergencyExecutors[msg.sender]) revert NotAuthorizedForEmergencyActions();
         
         // 执行紧急行动
-        for (uint256 i = 0; i < targets.length; i++) {
+        for (uint256 i = 0; i < targets.length;) {
             (bool success, ) = targets[i].call{value: values[i]}(calldatas[i]);
             if (!success) revert EmergencyActionFailed();
+            unchecked {
+                ++i;  // Gas 优化
+            }
         }
         
         emit EmergencyActionExecuted(msg.sender, action, block.timestamp);

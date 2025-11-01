@@ -69,6 +69,15 @@ swarm/
 *.MERGE_MSG.swp
 MERGE_MSG
 
+# Deployment files (may contain sensitive info)
+deployments/
+
+# Private keys and sensitive data
+*.key
+*.pem
+private_key*
+*secret*
+
  Documentation (optional - uncomment if you want to ignore)
  DIAP_README.md
 

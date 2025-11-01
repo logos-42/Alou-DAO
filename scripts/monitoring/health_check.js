@@ -6,7 +6,12 @@
  * 建议：每 5-10 分钟运行一次（使用 cron 或 GitHub Actions）
  */
 
-const hre = require("hardhat");
+import pkg from "hardhat";
+const hre = pkg;
+const { ethers } = hre;
+import * as fs from "fs";
+import * as dotenv from "dotenv";
+dotenv.config();
 
 // 配置阈值
 const THRESHOLDS = {
@@ -46,10 +51,10 @@ async function main() {
         const stakingRewardRate = await token.stakingRewardRate();
         
         console.log("   状态:", isPaused ? "⏸️  已暂停" : "✅ 正常运行");
-        console.log("   总供应量:", hre.ethers.formatEther(totalSupply), "DIAP");
-        console.log("   合约余额:", hre.ethers.formatEther(contractBalance), "DIAP");
-        console.log("   总质押量:", hre.ethers.formatEther(totalStaked), "DIAP");
-        console.log("   总燃烧量:", hre.ethers.formatEther(totalBurned), "DIAP");
+        console.log("   总供应量:", ethers.utils.formatEther(totalSupply), "DIAP");
+        console.log("   合约余额:", ethers.utils.formatEther(contractBalance), "DIAP");
+        console.log("   总质押量:", ethers.utils.formatEther(totalStaked), "DIAP");
+        console.log("   总燃烧量:", ethers.utils.formatEther(totalBurned), "DIAP");
         console.log("   质押奖励率:", stakingRewardRate.toString(), "基点");
         
         if (isPaused) {
@@ -57,14 +62,14 @@ async function main() {
         }
         
         // 检查合约余额是否充足
-        const minBalance = totalStaked / 10n; // 至少应该有质押量的 10%
-        if (contractBalance < minBalance) {
-            alerts.push(`⚠️ 合约余额不足：${hre.ethers.formatEther(contractBalance)} DIAP（建议 > ${hre.ethers.formatEther(minBalance)} DIAP）`);
+        const minBalance = totalStaked.div(10); // 至少应该有质押量的 10%
+        if (contractBalance.lt(minBalance)) {
+            alerts.push(`⚠️ 合约余额不足：${ethers.utils.formatEther(contractBalance)} DIAP（建议 > ${ethers.utils.formatEther(minBalance)} DIAP）`);
         }
         
         // 🆕 检查奖励池余额（关键告警）
-        if (totalStaked > 0n) {
-            const rewardPoolRatio = Number(contractBalance * 100n / totalStaked);
+        if (totalStaked.gt(0)) {
+            const rewardPoolRatio = Number(contractBalance.mul(100).div(totalStaked));
             console.log("   奖励池比例:", rewardPoolRatio.toFixed(2), "% (余额/质押量)");
             
             if (rewardPoolRatio < 5) {
@@ -77,7 +82,7 @@ async function main() {
         }
         
         // 检查质押率
-        const stakingRatio = Number(totalStaked * 10000n / totalSupply) / 100;
+        const stakingRatio = Number(totalStaked.mul(10000).div(totalSupply)) / 100;
         console.log("   质押率:", stakingRatio.toFixed(2), "%");
         if (stakingRatio < 5) {
             warnings.push(`⚠️ 质押率较低：${stakingRatio.toFixed(2)}%`);
@@ -93,7 +98,7 @@ async function main() {
         
         console.log("   状态:", networkPaused ? "⏸️  已暂停" : "✅ 正常运行");
         console.log("   总智能体数:", totalAgents.toString());
-        console.log("   总交易量:", hre.ethers.formatEther(totalVolume), "DIAP");
+        console.log("   总交易量:", ethers.utils.formatEther(totalVolume), "DIAP");
         
         if (networkPaused) {
             alerts.push("⚠️ DIAPAgentNetwork 合约已暂停");
@@ -107,7 +112,7 @@ async function main() {
         const paymentVolume = await paymentCore.totalVolume();
         
         console.log("   状态:", paymentPaused ? "⏸️  已暂停" : "✅ 正常运行");
-        console.log("   总支付量:", hre.ethers.formatEther(paymentVolume), "DIAP");
+        console.log("   总支付量:", ethers.utils.formatEther(paymentVolume), "DIAP");
         
         if (paymentPaused) {
             alerts.push("⚠️ DIAPPaymentCore 合约已暂停");
@@ -124,13 +129,13 @@ async function main() {
         
         const largeTransfers = transfers.filter(event => {
             const amount = event.args.value;
-            return amount > hre.ethers.parseEther(THRESHOLDS.largeTransferAmount.toString());
+            return amount.gt(ethers.utils.parseEther(THRESHOLDS.largeTransferAmount.toString()));
         });
         
         if (largeTransfers.length > 0) {
             console.log(`   ⚠️ 发现 ${largeTransfers.length} 笔大额转账`);
             largeTransfers.forEach(event => {
-                warnings.push(`大额转账: ${hre.ethers.formatEther(event.args.value)} DIAP (区块 ${event.blockNumber})`);
+                warnings.push(`大额转账: ${ethers.utils.formatEther(event.args.value)} DIAP (区块 ${event.blockNumber})`);
             });
         } else {
             console.log("   ✅ 未发现异常大额转账");
@@ -140,10 +145,10 @@ async function main() {
         console.log("\n5️⃣ 检查 Gas 价格...");
         const feeData = await hre.ethers.provider.getFeeData();
         const gasPrice = feeData.gasPrice;
-        console.log("   当前 Gas 价格:", hre.ethers.formatUnits(gasPrice, "gwei"), "Gwei");
+        console.log("   当前 Gas 价格:", ethers.utils.formatUnits(gasPrice, "gwei"), "Gwei");
         
-        if (gasPrice > hre.ethers.parseUnits("100", "gwei")) {
-            warnings.push(`⚠️ Gas 价格较高：${hre.ethers.formatUnits(gasPrice, "gwei")} Gwei`);
+        if (gasPrice.gt(ethers.utils.parseUnits("100", "gwei"))) {
+            warnings.push(`⚠️ Gas 价格较高：${ethers.utils.formatUnits(gasPrice, "gwei")} Gwei`);
         }
 
         // 6. 生成报告
@@ -173,17 +178,16 @@ async function main() {
             alerts: alerts,
             warnings: warnings,
             metrics: {
-                totalSupply: hre.ethers.formatEther(totalSupply),
-                contractBalance: hre.ethers.formatEther(contractBalance),
-                totalStaked: hre.ethers.formatEther(totalStaked),
+                totalSupply: ethers.utils.formatEther(totalSupply),
+                contractBalance: ethers.utils.formatEther(contractBalance),
+                totalStaked: ethers.utils.formatEther(totalStaked),
                 stakingRatio: stakingRatio,
                 totalAgents: totalAgents.toString(),
-                totalVolume: hre.ethers.formatEther(totalVolume),
-                gasPrice: hre.ethers.formatUnits(gasPrice, "gwei")
+                totalVolume: ethers.utils.formatEther(totalVolume),
+                gasPrice: ethers.utils.formatUnits(gasPrice, "gwei")
             }
         };
 
-        const fs = require('fs');
         const logDir = 'logs/health';
         if (!fs.existsSync(logDir)) {
             fs.mkdirSync(logDir, { recursive: true });
@@ -213,7 +217,6 @@ async function main() {
         };
         
         // 保存错误报告
-        const fs = require('fs');
         const logDir = 'logs/health';
         if (!fs.existsSync(logDir)) {
             fs.mkdirSync(logDir, { recursive: true });
@@ -227,13 +230,9 @@ async function main() {
 }
 
 // 如果直接运行脚本
-if (require.main === module) {
-    main()
-        .then(() => process.exit(0))
-        .catch((error) => {
-            console.error(error);
-            process.exit(1);
-        });
-}
-
-module.exports = { main };
+main()
+    .then(() => process.exit(0))
+    .catch((error) => {
+        console.error(error);
+        process.exit(1);
+    });

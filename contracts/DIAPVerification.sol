@@ -383,7 +383,7 @@ contract DIAPVerification is
         
         bool[] memory results = new bool[](agents.length);
         
-        for (uint256 i = 0; i < agents.length; i++) {
+        for (uint256 i = 0; i < agents.length;) {
             if (blacklistedAgents[agents[i]]) {
                 results[i] = false;
                 continue;
@@ -399,6 +399,9 @@ contract DIAPVerification is
                 }
             } catch {
                 results[i] = false;
+            }
+            unchecked {
+                ++i;  // Gas 优化
             }
         }
         

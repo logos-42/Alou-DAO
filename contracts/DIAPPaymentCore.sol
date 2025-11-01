@@ -161,8 +161,13 @@ contract DIAPPaymentCore is
         if (amount == 0) revert AmountMustBeGreaterThanZero();
         if (bytes(paymentId).length == 0) revert PaymentIDRequired();
         if (payments[paymentId].timestamp != 0) revert PaymentIDAlreadyExists();
-        if (!agentNetwork.getAgent(msg.sender).isActive) revert SenderNotRegistered();
-        if (!agentNetwork.getAgent(to).isActive) revert RecipientNotRegistered();
+        
+        // 获取实际的智能体地址（支持 AA 账户调用）
+        address actualSender = _getActualAgent(msg.sender);
+        address actualRecipient = _getActualAgent(to);
+        
+        if (!agentNetwork.getAgent(actualSender).isActive) revert SenderNotRegistered();
+        if (!agentNetwork.getAgent(actualRecipient).isActive) revert RecipientNotRegistered();
 
         uint256 fee = (amount * paymentFeeRate) / 10000;
         uint256 totalAmount = amount + fee;
@@ -170,8 +175,8 @@ contract DIAPPaymentCore is
         if (token.balanceOf(msg.sender) < totalAmount) revert InsufficientBalance();
 
         payments[paymentId] = Payment({
-            from: msg.sender,
-            to: to,
+            from: actualSender,
+            to: actualRecipient,
             amount: amount,
             paymentId: paymentId,
             description: description,
@@ -182,7 +187,7 @@ contract DIAPPaymentCore is
 
         totalPayments++;
 
-        emit PaymentCreated(paymentId, msg.sender, to, amount);
+        emit PaymentCreated(paymentId, actualSender, actualRecipient, amount);
     }
 
     function confirmPayment(string calldata paymentId) external nonReentrant whenNotPaused {
@@ -339,6 +344,25 @@ contract DIAPPaymentCore is
         returns (uint256 _totalPayments, uint256 _totalServices, uint256 _totalVolume)
     {
         return (totalPayments, totalServices, totalVolume);
+    }
+    
+    // ============ 内部辅助函数 ============
+    
+    /**
+     * @dev 获取实际的智能体地址（支持 AA 账户）
+     * @param caller 调用者地址
+     * @return 实际的智能体地址
+     */
+    function _getActualAgent(address caller) internal view returns (address) {
+        // 首先检查调用者本身是否是注册的智能体
+        if (agentNetwork.getAgent(caller).isActive) {
+            return caller;
+        }
+        
+        // 如果不是，检查是否是某个智能体的 AA 账户
+        // 这需要遍历或使用反向映射（为了简化，这里返回调用者）
+        // 实际实现中，可以在 AgentNetwork 中添加 aaAccountToAgent 映射
+        return caller;
     }
 
     receive() external payable {}

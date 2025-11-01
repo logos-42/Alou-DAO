@@ -72,6 +72,7 @@ contract DIAPPaymentChannel is
     uint256 public channelFeeRate;
     uint256 public constant CHALLENGE_PERIOD = 24 hours;
 
+    // solhint-disable-next-line var-name-mixedcase
     bytes32 public DOMAIN_SEPARATOR;
     bytes32 public constant CHANNEL_STATE_TYPEHASH =
         keccak256(

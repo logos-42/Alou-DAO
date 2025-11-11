@@ -6,7 +6,7 @@
 
 DIAP 是一个去中心化智能体网络协议，为 AI 智能体提供身份、支付、通信和治理的完整基础设施。现已集成 ERC-4337 账户抽象标准，为智能体提供更安全、更灵活的链上钱包解决方案。
 
-## ✨ 最新更新 (v0.4.0)
+## ✨ 最新更新 (v0.4.1)
 
 - 🆕 **ERC-4337 集成**: 完整的账户抽象支持（DIAPAccount, DIAPAccountFactory, DIAPPaymaster）
 - 🔐 **Session Key 管理**: 智能体临时授权密钥，支持限额和过期控制
@@ -34,7 +34,7 @@ DIAP 是一个去中心化智能体网络协议，为 AI 智能体提供身份�
 ## ✨ 主要特性
 
 ### 核心功能
-- ✅ IPNS持久化身份标识符
+- ✅ IPNS持久化身份标识符（注册时提交 CID 或 IPNS，无需提供私钥）
 - ✅ 智能体身份和DID管理
 - ✅ 多层级质押机制
 - ✅ 服务托管支付和自动结算
@@ -56,18 +56,32 @@ DIAP 是一个去中心化智能体网络协议，为 AI 智能体提供身份�
 
 | 合约 | 代理地址 | 区块浏览器 |
 |------|---------|-----------|
-| DIAPToken | [0x2a5b6A672e9028962Ab4DaF20d256C0978604Cb3](https://sepolia.etherscan.io/address/0x2a5b6A672e9028962Ab4DaF20d256C0978604Cb3) | Etherscan |
-| DIAPAgentNetwork | [0x9eF71FD5be68ebab2ABE20c5Fab826b14BfBc089](https://sepolia.etherscan.io/address/0x9eF71FD5be68ebab2ABE20c5Fab826b14BfBc089) | Etherscan |
-| DIAPVerification | [0x8F513135a6865173b6fC08e7A1138211ba174109](https://sepolia.etherscan.io/address/0x8F513135a6865173b6fC08e7A1138211ba174109) | Etherscan |
-| DIAPPaymentCore | [0x498CbdD8d509058FfDe7335391B8a053Bb4Ab0e7](https://sepolia.etherscan.io/address/0x498CbdD8d509058FfDe7335391B8a053Bb4Ab0e7) | Etherscan |
-| DIAPPaymentChannel | [0x471cB216e5bF64d9E33b92E12d6AE3327c7a7a80](https://sepolia.etherscan.io/address/0x471cB216e5bF64d9E33b92E12d6AE3327c7a7a80) | Etherscan |
-| DIAPPaymentPrivacy | [0x69bd0c763F86B80C043eA7CF1af58186E23E21cc](https://sepolia.etherscan.io/address/0x69bd0c763F86B80C043eA7CF1af58186E23E21cc) | Etherscan |
-| DIAPGovernance | [0xFBD843F3ECDd5398639d849763088BF9Cd36f2Be](https://sepolia.etherscan.io/address/0xFBD843F3ECDd5398639d849763088BF9Cd36f2Be) | Etherscan |
-| DIAPAccountFactory | [0xeaf2cb64685695497bf20f70c6F74bA86851edfD](https://sepolia.etherscan.io/address/0xeaf2cb64685695497bf20f70c6F74bA86851edfD) | Etherscan |
-| DIAPPaymaster | [0xA960cf9053FA76278e16f9D4BA35225f7634DC54](https://sepolia.etherscan.io/address/0xA960cf9053FA76278e16f9D4BA35225f7634DC54) | Etherscan |
+| DIAPToken | [0xF684594C83D5d940e3bec7D25FaAF27A562133dB](https://sepolia.etherscan.io/address/0xF684594C83D5d940e3bec7D25FaAF27A562133dB) | Etherscan |
+| DIAPAgentNetwork | [0x82d4a4171a255D0f5b759Dfa5EFf77c00C94b3ca](https://sepolia.etherscan.io/address/0x82d4a4171a255D0f5b759Dfa5EFf77c00C94b3ca) | Etherscan |
+| DIAPVerification | [0x981c42fE2A683A722c6936011fe7A6c13Ff7Cf95](https://sepolia.etherscan.io/address/0x981c42fE2A683A722c6936011fe7A6c13Ff7Cf95) | Etherscan |
+| DIAPPaymentCore | [0xbC067E6DF408fb94c14869E3064958FB5C730428](https://sepolia.etherscan.io/address/0xbC067E6DF408fb94c14869E3064958FB5C730428) | Etherscan |
+| DIAPPaymentChannel | [0xE6173EBD4c7653d0bb4F53e7d87995D9A63D00E3](https://sepolia.etherscan.io/address/0xE6173EBD4c7653d0bb4F53e7d87995D9A63D00E3) | Etherscan |
+| DIAPPaymentPrivacy | [0x13796826DE88137ab9a6F7C7cd67de0eDB1631C1](https://sepolia.etherscan.io/address/0x13796826DE88137ab9a6F7C7cd67de0eDB1631C1) | Etherscan |
+| DIAPGovernance | [0x652E8B3Ae04Cb5da7E995788A7111b24833C9CaC](https://sepolia.etherscan.io/address/0x652E8B3Ae04Cb5da7E995788A7111b24833C9CaC) | Etherscan |
+| DIAPAccountFactory | [0x489661cC3f17ceBC3e20430640318e9F4E88425B](https://sepolia.etherscan.io/address/0x489661cC3f17ceBC3e20430640318e9F4E88425B) | Etherscan |
+| DIAPPaymaster | [0x18459fa46e4ffD0aEc0806a7B00C2B0863f1c036](https://sepolia.etherscan.io/address/0x18459fa46e4ffD0aEc0806a7B00C2B0863f1c036) | Etherscan |
 
 **完整部署信息**: 查看 [emergency/contract_addresses.txt](./emergency/contract_addresses.txt)
 
+# Core Contracts
+DIAP_TOKEN_ADDRESS=0xF684594C83D5d940e3bec7D25FaAF27A562133dB
+DIAP_NETWORK_ADDRESS=0x82d4a4171a255D0f5b759Dfa5EFf77c00C94b3ca
+DIAP_VERIFICATION_ADDRESS=0x981c42fE2A683A722c6936011fe7A6c13Ff7Cf95
+DIAP_PAYMENT_CORE_ADDRESS=0xbC067E6DF408fb94c14869E3064958FB5C730428
+DIAP_PAYMENT_CHANNEL_ADDRESS=0xE6173EBD4c7653d0bb4F53e7d87995D9A63D00E3
+DIAP_PAYMENT_PRIVACY_ADDRESS=0x13796826DE88137ab9a6F7C7cd67de0eDB1631C1
+DIAP_GOVERNANCE_ADDRESS=0x652E8B3Ae04Cb5da7E995788A7111b24833C9CaC
+TIMELOCK_CONTROLLER_ADDRESS=0xF8B6499BBcFB7dE8a4C61e873603BCd0500Fe0D0
+
+# ERC-4337 Contracts
+DIAP_ACCOUNT_FACTORY_ADDRESS=0x489661cC3f17ceBC3e20430640318e9F4E88425B
+DIAP_PAYMASTER_ADDRESS=0x18459fa46e4ffD0aEc0806a7B00C2B0863f1c036
+ENTRY_POINT_ADDRESS=0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789
 ## 📊 代币经济
 
 - **总供应量**: 10亿 DIAP
@@ -194,5 +208,5 @@ MIT License
 ⚠️ **注意**: 这是一个实验性项目，请在生产环境使用前进行充分测试和审计。
 
 **版本**: v0.4.0  
-**最后更新**: 2025-11-01  
+**最后更新**: 2025-11-11  
 **部署网络**: Sepolia Testnet (Chain ID: 11155111)

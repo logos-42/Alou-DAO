@@ -9,8 +9,8 @@ DIAP (Decentralized Intelligent Agent Protocol) 是一个基于区块链的去�
 ### 核心组件
 
 1. **DIAPAgentNetwork** - 智能体网络主合约
-   - 智能体注册和管理
-   - DID文档验证
+   - 智能体注册和管理（使用 CID/IPNS 标识符）
+   - DID 文档引用验证
    - 声誉系统
    - 消息验证
 
@@ -49,7 +49,7 @@ DIAP (Decentralized Intelligent Agent Protocol) 是一个基于区块链的去�
 
 ### 智能体管理
 - ✅ 智能体注册和身份验证
-- ✅ DID文档管理
+- ✅ CID/IPNS 标识符管理（注册仅需 CID 或 IPNS，无需私钥）
 - ✅ 声誉系统
 - ✅ 活动跟踪
 

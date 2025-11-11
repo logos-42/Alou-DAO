@@ -3,6 +3,133 @@ const { ethers } = pkg;
 import * as fs from "fs";
 import * as path from "path";
 
+async function updateEmergencyAddresses(deploymentInfo) {
+    const emergencyDir = path.join(process.cwd(), "emergency");
+    const targetFile = path.join(emergencyDir, "contract_addresses.txt");
+
+    const contracts = deploymentInfo.contracts || {};
+    const token = contracts.DIAPToken || {};
+    const agentNetwork = contracts.DIAPAgentNetwork || {};
+    const verification = contracts.DIAPVerification || {};
+    const paymentCore = contracts.DIAPPaymentCore || {};
+    const paymentChannel = contracts.DIAPPaymentChannel || {};
+    const paymentPrivacy = contracts.DIAPPaymentPrivacy || {};
+    const governance = contracts.DIAPGovernance || {};
+    const timelock = contracts.TimelockController || {};
+    const accountFactory = contracts.DIAPAccountFactory || {};
+    const paymaster = contracts.DIAPPaymaster || {};
+
+    const timestamp = deploymentInfo.timestamp || new Date().toISOString();
+    const dateStr = timestamp.split("T")[0];
+
+    const explorer = (address) =>
+        address ? `https://sepolia.etherscan.io/address/${address}` : "N/A";
+
+    const sepoliaCoreSection = [
+        "--- 核心合约 (Sepolia) ---",
+        "",
+        "DIAPToken:",
+        `代理地址: ${token.proxyAddress || "N/A"}`,
+        `实现地址: ${token.implementationAddress || "N/A"}`,
+        `区块浏览器: ${explorer(token.proxyAddress)}`,
+        "",
+        "DIAPAgentNetwork:",
+        `代理地址: ${agentNetwork.proxyAddress || "N/A"}`,
+        `实现地址: ${agentNetwork.implementationAddress || "N/A"}`,
+        `区块浏览器: ${explorer(agentNetwork.proxyAddress)}`,
+        "",
+        "DIAPVerification:",
+        `代理地址: ${verification.proxyAddress || "N/A"}`,
+        `实现地址: ${verification.implementationAddress || "N/A"}`,
+        `区块浏览器: ${explorer(verification.proxyAddress)}`,
+        "",
+        "DIAPPaymentCore:",
+        `代理地址: ${paymentCore.proxyAddress || "N/A"}`,
+        `实现地址: ${paymentCore.implementationAddress || "N/A"}`,
+        `区块浏览器: ${explorer(paymentCore.proxyAddress)}`,
+        "",
+        "DIAPPaymentChannel:",
+        `代理地址: ${paymentChannel.proxyAddress || "N/A"}`,
+        `实现地址: ${paymentChannel.implementationAddress || "N/A"}`,
+        `区块浏览器: ${explorer(paymentChannel.proxyAddress)}`,
+        "",
+        "DIAPPaymentPrivacy:",
+        `代理地址: ${paymentPrivacy.proxyAddress || "N/A"}`,
+        `实现地址: ${paymentPrivacy.implementationAddress || "N/A"}`,
+        `区块浏览器: ${explorer(paymentPrivacy.proxyAddress)}`,
+        "",
+        "DIAPGovernance:",
+        `地址: ${governance.address || "N/A"}`,
+        `区块浏览器: ${explorer(governance.address)}`,
+        "",
+        "TimelockController:",
+        `地址: ${timelock.address || "N/A"}`,
+        `区块浏览器: ${explorer(timelock.address)}`
+    ].join("\n");
+
+    const accountImplementation = accountFactory.accountImplementation || "N/A";
+    const erc4337Section = [
+        "--- ERC-4337 合约 ---",
+        "",
+        "DIAPAccountFactory:",
+        `地址: ${accountFactory.address || "N/A"}`,
+        `DIAPAccount实现: ${accountImplementation}`,
+        `EntryPoint: ${accountFactory.entryPoint || "N/A"}`,
+        `区块浏览器: ${explorer(accountFactory.address)}`,
+        "",
+        "DIAPPaymaster:",
+        `地址: ${paymaster.address || "N/A"}`,
+        `EntryPoint: ${paymaster.entryPoint || "N/A"}`,
+        `区块浏览器: ${explorer(paymaster.address)}`
+    ].join("\n");
+
+    let baseSection = "";
+
+    try {
+        const original = await fs.promises.readFile(targetFile, "utf8");
+        const baseIndex = original.indexOf("--- 核心合约 (Base Sepolia) ---");
+        if (baseIndex !== -1) {
+            baseSection = original.slice(baseIndex).trimEnd();
+            baseSection = baseSection
+                .replace(/Sepolia 部署时间:\s*.*/, `Sepolia 部署时间: ${timestamp}`)
+                .replace(/日期:\s*.*/, `日期: ${dateStr}`);
+        }
+    } catch (error) {
+        // 如果文件不存在，则保留空的 baseSection
+    }
+
+    const header = [
+        "=== DIAP 合约地址 ===",
+        "",
+        "网络: Sepolia 测试网 (Ethereum)",
+        "Chain ID: 11155111",
+        `部署者: ${deploymentInfo.deployer || "N/A"}`,
+        `部署时间: ${timestamp}`,
+        ""
+    ].join("\n");
+
+    let finalContent = [
+        header,
+        sepoliaCoreSection,
+        "",
+        erc4337Section
+    ].join("\n");
+
+    if (baseSection) {
+        finalContent = `${finalContent}\n\n${baseSection}`;
+    }
+
+    // 如果 baseSection 原本为空，生成一个默认尾部
+    if (!baseSection) {
+        finalContent = `${finalContent}\n\n--- 部署信息 ---\n\n部署者地址: ${
+            deploymentInfo.deployer || "N/A"
+        }\n\nSepolia 部署时间: ${timestamp}\n\n--- RPC URLs ---\n\nSepolia: https://ethereum-sepolia-rpc.publicnode.com (推荐)\n\n--- 区块浏览器 ---\n\nSepolia Etherscan: https://sepolia.etherscan.io\n\n--- 最后更新 ---\n\n日期: ${dateStr}\n版本: v0.4.0 (包含ERC-4337)\n状态: 测试网部署完成\n`;
+    }
+
+    await fs.promises.writeFile(targetFile, `${finalContent}\n`);
+    console.log("✅ 已更新 emergency/contract_addresses.txt");
+}
+
 async function deployUUPSProxy(contractFactory, implementationName, initArgs, initFunction) {
     console.log(`\n部署${implementationName}实现合约...`);
     const implementation = await contractFactory.deploy();

@@ -1,0 +1,16 @@
+anchor_lang::Accounts<'info, anchor_spl::token_2022_extensions::DefaultAccountStateInitializeBumps>
+anchor_lang::Accounts<'info, anchor_spl::token_2022_extensions::DefaultAccountStateUpdateBumps>
+anchor_lang::Accounts<'info, anchor_spl::token_2022_extensions::GroupMemberPointerInitializeBumps>
+anchor_lang::Accounts<'info, anchor_spl::token_2022_extensions::GroupMemberPointerUpdateBumps>
+anchor_lang::Accounts<'info, anchor_spl::token_2022_extensions::HarvestWithheldTokensToMintBumps>
+anchor_lang::Accounts<'info, anchor_spl::token_2022_extensions::ImmutableOwnerInitializeBumps>
+anchor_lang::Accounts<'info, anchor_spl::token_2022_extensions::InterestBearingMintInitializeBumps>
+anchor_lang::Accounts<'info, anchor_spl::token_2022_extensions::InterestBearingMintUpdateRateBumps>
+anchor_lang::Accounts<'info, anchor_spl::token_2022_extensions::MetadataPointerInitializeBumps>
+anchor_lang::Accounts<'info, anchor_spl::token_2022_extensions::MintCloseAuthorityInitializeBumps>
+anchor_lang::Accounts<'info, anchor_spl::token_2022_extensions::NonTransferableMintInitializeBumps>
+anchor_lang::Accounts<'info, anchor_spl::token_2022_extensions::PermanentDelegateInitializeBumps>
+anchor_lang::Accounts<'info, anchor_spl::token_2022_extensions::TokenMetadataUpdateAuthorityBumps>
+anchor_lang::Accounts<'info, anchor_spl::token_2022_extensions::TokenMetadataUpdateFieldBumps>
+anchor_lang::Accounts<'info, anchor_spl::token_2022_extensions::TransferFeeSetTransferFeeBumps>
+anchor_lang::Accounts<'info, anchor_spl::token_2022_extensions::WithdrawWithheldTokensFromMintBumps>

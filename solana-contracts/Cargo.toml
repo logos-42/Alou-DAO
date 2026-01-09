@@ -1,0 +1,22 @@
+[workspace]
+members = [
+    "programs/diap-agent-network",
+    "programs/diap-token",
+    "programs/diap-payment-core",
+    "programs/diap-payment-channel",
+    "programs/diap-payment-privacy",
+    "programs/diap-verification",
+    "programs/diap-governance",
+    "programs/diap-subscription",
+]
+resolver = "2"
+
+[profile.release]
+overflow-checks = true
+lto = "fat"
+codegen-units = 1
+
+[profile.release.build-override]
+opt-level = 3
+incremental = false
+codegen-units = 1

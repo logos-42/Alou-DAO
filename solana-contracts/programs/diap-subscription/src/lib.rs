@@ -1,4 +1,4 @@
-//! DIAP Subscription Program
+﻿//! DIAP Subscription Program
 //! 
 //! Subscription management with multi-token support.
 //! Adapted from Solidity DIAPSubscription.sol
@@ -6,7 +6,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
 
-declare_id!("8yH6fF8e9r4q4q4q4q4q4q4q4q4q4q4q4q4q4q4q");
+declare_id!("11111111111111111111111111111111");
 
 #[program]
 pub mod diap_subscription {
@@ -107,7 +107,7 @@ pub mod diap_subscription {
 
         let subscription = &mut ctx.accounts.subscription;
         let plan = &ctx.accounts.plan;
-        let user = &ctx.accounts.user;
+        let user = &ctx.accounts.payer;
 
         require!(plan.is_active, ErrorCode::PlanNotActive);
 
@@ -128,9 +128,8 @@ pub mod diap_subscription {
         let expires_at = started_at + (plan.duration_days as i64 * 24 * 60 * 60);
 
         // Cancel previous active subscription if exists
-        if let Ok(active_subscription) = &mut ctx.accounts.active_subscription {
-            active_subscription.status = SubscriptionStatus::Cancelled as u8;
-        }
+        let active_subscription = &mut ctx.accounts.active_subscription;
+        active_subscription.subscription_id = 0; // Mark as cancelled
 
         let new_subscription = &mut ctx.accounts.subscription_account;
         new_subscription.subscription_id = subscription_id;
@@ -144,10 +143,10 @@ pub mod diap_subscription {
         new_subscription.bump = ctx.bumps.subscription_account;
 
         // Update active subscription
-        let active_sub = &mut ctx.accounts.active_subscription_record;
-        active_sub.user = user.key();
-        active_sub.subscription_id = subscription_id;
-        active_sub.bump = ctx.bumps.active_subscription_record;
+        let active_subscription = &mut ctx.accounts.active_subscription;
+        active_subscription.user = user.key();
+        active_subscription.subscription_id = subscription_id;
+        active_subscription.bump = ctx.bumps.active_subscription;
 
         // Update stats
         subscription.next_subscription_id = subscription.next_subscription_id.checked_add(1).ok_or(ErrorCode::MathOverflow)?;
@@ -362,7 +361,7 @@ pub struct CreateSubscription<'info> {
     
     #[account(
         init,
-        payer = user,
+        payer = payer,
         space = 8 + SubscriptionAccount::LEN,
         seeds = [b"subscription-account", subscription.next_subscription_id.to_le_bytes().as_ref()],
         bump
@@ -370,25 +369,16 @@ pub struct CreateSubscription<'info> {
     pub subscription_account: Account<'info, SubscriptionAccount>,
     
     #[account(
-        init,
-        payer = user,
-        space = 8 + ActiveSubscription::LEN,
-        seeds = [b"active-subscription", user.key().as_ref()],
-        bump
-    )]
-    pub active_subscription_record: Account<'info, ActiveSubscription>,
-    
-    #[account(
         mut,
-        seeds = [b"active-subscription", user.key().as_ref()],
+        seeds = [b"active-subscription", payer.key().as_ref()],
         bump
     )]
-    pub active_subscription: Result<Account<'info, ActiveSubscription>>,
+    pub active_subscription: Account<'info, ActiveSubscription>,
     
     #[account(
         mut,
         token::mint = token_mint,
-        token::authority = user
+        token::authority = payer
     )]
     pub user_token_account: Account<'info, TokenAccount>,
     
@@ -400,7 +390,7 @@ pub struct CreateSubscription<'info> {
     pub platform_token_account: Account<'info, TokenAccount>,
     
     #[account(mut)]
-    pub user: Signer<'info>,
+    pub payer: Signer<'info>,
     
     pub token_mint: Account<'info, Mint>,
     

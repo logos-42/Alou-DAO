@@ -4,8 +4,9 @@
 //! Adapted from Solidity DIAPGovernance.sol
 
 use anchor_lang::prelude::*;
+use anchor_spl::token::Mint;
 
-declare_id!("5mK7w9e9q4q4q4q4q4q4q4q4q4q4q4q4q4q4q4q4q");
+declare_id!("GovERnJJTiQx8JRhuXDn3WBxHbqPX3Tk7fTQWUwfF889");
 
 #[program]
 pub mod diap_governance {
@@ -177,7 +178,8 @@ pub mod diap_governance {
         let governance = &mut ctx.accounts.governance;
         require!((governance.num_emergency_executors as usize) < MAX_PERMISSIONS, ErrorCode::MaxPermissionsReached);
 
-        governance.emergency_executors[governance.num_emergency_executors as usize] = executor;
+        let idx = governance.num_emergency_executors as usize;
+        governance.emergency_executors[idx] = executor;
         governance.num_emergency_executors = governance.num_emergency_executors.checked_add(1).ok_or(ErrorCode::MathOverflow)?;
 
         emit!(EmergencyExecutorAddedEvent {
@@ -191,7 +193,8 @@ pub mod diap_governance {
         let governance = &mut ctx.accounts.governance;
         require!((governance.num_proposal_creators as usize) < MAX_PERMISSIONS, ErrorCode::MaxPermissionsReached);
 
-        governance.proposal_creators[governance.num_proposal_creators as usize] = creator;
+        let idx = governance.num_proposal_creators as usize;
+        governance.proposal_creators[idx] = creator;
         governance.num_proposal_creators = governance.num_proposal_creators.checked_add(1).ok_or(ErrorCode::MathOverflow)?;
 
         emit!(ProposalCreatorAddedEvent {
@@ -295,7 +298,7 @@ pub struct CastVote<'info> {
     )]
     pub vote_record: Account<'info, VoteRecord>,
     
-    /// CHECK: Voter account
+    #[account(mut)]
     pub voter: Signer<'info>,
     
     pub system_program: Program<'info, System>,
@@ -331,6 +334,7 @@ pub struct UpdatePermissions<'info> {
     
     pub token_mint: Account<'info, Mint>,
     
+    #[account(mut)]
     pub authority: Signer<'info>,
 }
 

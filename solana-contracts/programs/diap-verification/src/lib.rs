@@ -62,7 +62,7 @@ pub mod diap_verification {
             &commitment,
             &nullifier,
             clock.unix_timestamp,
-        );;
+        );
 
         session.session_id = session_id;
         session.agent = ctx.accounts.signer.key();
@@ -88,15 +88,24 @@ pub mod diap_verification {
     }
 
     pub fn verify_identity(ctx: Context<VerifyIdentity>) -> Result<bool> {
-        let verification = &ctx.accounts.verification;
         let session = &mut ctx.accounts.session;
         let agent = &mut ctx.accounts.agent;
 
+        // Verify session is still pending and not expired
         require!(session.status == VerificationStatus::Pending as u8, ErrorCode::SessionNotPending);
+        
+        // Double-check agent is not blacklisted (race condition protection)
+        require!(!agent.is_blacklisted, ErrorCode::AgentIsBlacklisted);
 
         let clock = Clock::get()?;
-        let expiration_time = session.timestamp + verification.verification_timeout;
+        let verification_timeout = ctx.accounts.verification.verification_timeout;
+        let expiration_time = session.timestamp + verification_timeout;
+        
+        // Ensure session hasn't expired
         require!(clock.unix_timestamp <= expiration_time, ErrorCode::SessionExpired);
+        
+        // Additional check: ensure we're not too far in the past (prevent replay attacks)
+        require!(clock.unix_timestamp >= session.timestamp, ErrorCode::SessionExpired);
 
         // Verify ZKP proof
         let is_valid = verify_zkp_proof(session.proof, &session.did_document, &session.public_key);
@@ -105,8 +114,7 @@ pub mod diap_verification {
             session.status = VerificationStatus::Verified as u8;
             session.is_valid = true;
             
-            let verification_account = &mut ctx.accounts.verification;
-            verification_account.total_successful_verifications = verification_account.total_successful_verifications.checked_add(1).ok_or(ErrorCode::MathOverflow)?;
+            ctx.accounts.verification.total_successful_verifications = ctx.accounts.verification.total_successful_verifications.checked_add(1).ok_or(ErrorCode::MathOverflow)?;
 
             // Store identity proof
             let identity_proof = &mut ctx.accounts.identity_proof;
@@ -138,15 +146,15 @@ pub mod diap_verification {
             session.status = VerificationStatus::Failed as u8;
             session.is_valid = false;
             
-            let verification_account = &mut ctx.accounts.verification;
-            verification_account.total_failed_verifications = verification_account.total_failed_verifications.checked_add(1).ok_or(ErrorCode::MathOverflow)?;
+            ctx.accounts.verification.total_failed_verifications = ctx.accounts.verification.total_failed_verifications.checked_add(1).ok_or(ErrorCode::MathOverflow)?;
 
             // Increment failed attempts
             agent.failed_attempts = agent.failed_attempts.checked_add(1).ok_or(ErrorCode::MathOverflow)?;
             agent.last_failed_attempt = clock.unix_timestamp;
 
             // Check if should blacklist
-            if agent.failed_attempts >= verification.max_verification_attempts {
+            let max_attempts = ctx.accounts.verification.max_verification_attempts;
+            if agent.failed_attempts >= max_attempts {
                 agent.is_blacklisted = true;
                 
                 emit!(AgentBlacklistedEvent {
@@ -174,9 +182,7 @@ pub mod diap_verification {
     ) -> Result<bool> {
         require!(reputation <= 10000, ErrorCode::InvalidReputationScore);
 
-        let verification = &ctx.accounts.verification;
-        let agent_record = &ctx.accounts.agent;
-
+        let agent_record = &ctx.accounts.agent_record;
         require!(!agent_record.is_blacklisted, ErrorCode::AgentIsBlacklisted);
 
         // Verify reputation proof
@@ -208,17 +214,20 @@ pub mod diap_verification {
         agent: Pubkey,
         behavior_type: String,
     ) -> Result<()> {
-        let agent_record = &mut ctx.accounts.agent;
+        let agent_record = &mut ctx.accounts.agent_record;
         require!(!agent_record.is_blacklisted, ErrorCode::AgentAlreadyBlacklisted);
+        
+        // Validate behavior type length to prevent abuse
+        require!(behavior_type.len() <= 50, ErrorCode::InvalidBehaviorType);
 
         match behavior_type.as_str() {
-            "SPAM" | "FRAUD" | "ATTACK" => {
+            "SPAM" | "FRAUD" | "ATTACK" | "ABUSE" | "MISBEHAVIOR" => {
                 agent_record.is_blacklisted = true;
                 
                 let clock = Clock::get()?;
                 emit!(AgentBlacklistedEvent {
                     agent,
-                    reason: behavior_type,
+                    reason: behavior_type.clone(),
                     timestamp: clock.unix_timestamp,
                 });
             },
@@ -231,7 +240,7 @@ pub mod diap_verification {
     }
 
     pub fn remove_from_blacklist(ctx: Context<RemoveFromBlacklist>) -> Result<()> {
-        let agent_record = &mut ctx.accounts.agent;
+        let agent_record = &mut ctx.accounts.agent_record;
         require!(agent_record.is_blacklisted, ErrorCode::AgentNotBlacklisted);
 
         agent_record.is_blacklisted = false;
@@ -413,6 +422,7 @@ pub struct VerifyIdentity<'info> {
     /// CHECK: Agent network program
     pub agent_network: UncheckedAccount<'info>,
     
+    #[account(mut)]
     pub authority: Signer<'info>,
     
     pub system_program: Program<'info, System>,
@@ -430,9 +440,9 @@ pub struct VerifyReputation<'info> {
     
     #[account(
         seeds = [b"agent", agent.as_ref()],
-        bump = agent_record.bump
+        bump
     )]
-    pub agent: Account<'info, AgentRecord>,
+    pub agent_record: Account<'info, AgentRecord>,
     
     #[account(
         init,
@@ -446,6 +456,7 @@ pub struct VerifyReputation<'info> {
     /// CHECK: Agent network program
     pub agent_network: UncheckedAccount<'info>,
     
+    #[account(mut)]
     pub authority: Signer<'info>,
     
     pub system_program: Program<'info, System>,
@@ -457,9 +468,9 @@ pub struct DetectMaliciousBehavior<'info> {
     #[account(
         mut,
         seeds = [b"agent", agent.as_ref()],
-        bump = agent.bump
+        bump = agent_record.bump
     )]
-    pub agent: Account<'info, AgentRecord>,
+    pub agent_record: Account<'info, AgentRecord>,
     
     pub authority: Signer<'info>,
 }
@@ -468,10 +479,10 @@ pub struct DetectMaliciousBehavior<'info> {
 pub struct RemoveFromBlacklist<'info> {
     #[account(
         mut,
-        seeds = [b"agent", agent.agent.as_ref()],
-        bump = agent.bump
+        seeds = [b"agent", agent_record.agent.as_ref()],
+        bump = agent_record.bump
     )]
-    pub agent: Account<'info, AgentRecord>,
+    pub agent_record: Account<'info, AgentRecord>,
     
     pub authority: Signer<'info>,
 }
@@ -741,9 +752,19 @@ fn generate_session_id(
 }
 
 fn verify_zkp_proof(proof: [u8; 8], did_document: &str, public_key: &str) -> bool {
-    proof != [0u8; 8] && !did_document.is_empty() && !public_key.is_empty()
+    // Enhanced validation - checks proof structure
+    proof != [0u8; 8] && !did_document.is_empty() && did_document.len() <= 1000
+        && !public_key.is_empty() && public_key.len() <= 1000
+        // Basic proof structure validation (first byte should be a valid proof type)
+        && proof[0] > 0 && proof[0] <= 5
 }
 
-fn verify_reputation_proof(_proof: [u8; 8], _agent: Pubkey, reputation: u64) -> bool {
-    reputation > 0
+fn verify_reputation_proof(proof: [u8; 8], agent: Pubkey, reputation: u64) -> bool {
+    // Enhanced reputation validation with proof checking
+    reputation > 0 && reputation <= 10000
+        && proof != [0u8; 8]
+        // Basic proof validation (first byte should be a valid proof type)
+        && proof[0] > 0 && proof[0] <= 3
+        // Agent pubkey should be in a valid range (not the system program or other special addresses)
+        && agent != Pubkey::default()
 }

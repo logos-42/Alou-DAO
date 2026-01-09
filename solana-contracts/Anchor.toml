@@ -7,10 +7,10 @@ diap_agent_network = "Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS"
 diap_token = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
 diap_payment_core = "HmbTLCmaGvZhKnn1Zfa1JVk7jmkAuCWx3nNSeXDVoEk1"
 diap_payment_channel = "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin"
-diap_payment_privacy = "3WEwXwX9TjF7w4p4q4q4q4q4q4q4q4q4q4q4q4q4q4q"
+diap_payment_privacy = "11111111111111111111111111111111"
 diap_verification = "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU"
-diap_governance = "5mK7w9e9q4q4q4q4q4q4q4q4q4q4q4q4q4q4q4q4q"
-diap_subscription = "8yH6fF8e9r4q4q4q4q4q4q4q4q4q4q4q4q4q4q4q"
+diap_governance = "GovERnJJTiQx8JRhuXDn3WBxHbqPX3Tk7fTQWUwfF889"
+diap_subscription = "11111111111111111111111111111111"
 
 [registry]
 url = "https://api.apr.dev"

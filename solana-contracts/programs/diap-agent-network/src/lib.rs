@@ -6,6 +6,8 @@
 //! Adapted from Solidity DIAPAgentNetwork.sol to Solana/Anchor.
 
 use anchor_lang::prelude::*;
+use anchor_lang::solana_program::keccak;
+use anchor_spl::token::{self, TokenAccount, Transfer, Mint, Token};
 
 declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
 
@@ -58,8 +60,8 @@ pub mod diap_agent_network {
         require!(!_is_identifier_used(&ctx.accounts.identifier_to_agent.identifiers, &identifier), ErrorCode::IdentifierAlreadyExists);
 
         let network = &ctx.accounts.network;
-        let agent = &mut ctx.accounts.agent;
         let clock = Clock::get()?;
+        let agent_key = ctx.accounts.agent.key();
 
         // Calculate total cost (stake + registration fee)
         let total_cost = staked_amount
@@ -77,6 +79,7 @@ pub mod diap_agent_network {
         token::transfer(cpi_ctx, total_cost)?;
 
         // Initialize agent
+        let agent = &mut ctx.accounts.agent;
         agent.authority = ctx.accounts.signer.key();
         agent.identifier = identifier.clone();
         agent.public_key = public_key;
@@ -93,7 +96,7 @@ pub mod diap_agent_network {
         // Update identifier mapping
         let idx = ctx.accounts.identifier_to_agent.idx;
         ctx.accounts.identifier_to_agent.identifiers[idx as usize] = identifier;
-        ctx.accounts.identifier_to_agent.agents[idx as usize] = ctx.accounts.agent.key();
+        ctx.accounts.identifier_to_agent.agents[idx as usize] = agent_key;
         ctx.accounts.identifier_to_agent.idx = idx.checked_add(1).ok_or(ErrorCode::MathOverflow)?;
 
         // Update network stats
@@ -299,7 +302,7 @@ pub mod diap_agent_network {
 
         // Update agent and service
         service.is_completed = true;
-        service.result_cid = result_cid;
+        service.result_cid = result_cid.clone();
 
         agent.total_earnings = agent.total_earnings.checked_add(reward).ok_or(ErrorCode::MathOverflow)?;
         agent.total_services = agent.total_services.checked_add(1).ok_or(ErrorCode::MathOverflow)?;
@@ -442,7 +445,7 @@ pub struct RegisterAgent<'info> {
     #[account(
         mut,
         seeds = [b"network", network.token_mint.as_ref()],
-        bump = network.bump
+        bump
     )]
     pub network: Account<'info, NetworkState>,
     
@@ -476,14 +479,14 @@ pub struct UnstakeAgent<'info> {
     #[account(
         mut,
         seeds = [b"agent", agent.authority.as_ref()],
-        bump = agent.bump
+        bump
     )]
     pub agent: Account<'info, Agent>,
     
     #[account(
         mut,
         seeds = [b"network", network.token_mint.as_ref()],
-        bump = network.bump
+        bump
     )]
     pub network: Account<'info, NetworkState>,
     
@@ -508,7 +511,7 @@ pub struct VerifyAgent<'info> {
     #[account(
         mut,
         seeds = [b"agent", agent.authority.as_ref()],
-        bump = agent.bump
+        bump
     )]
     pub agent: Account<'info, Agent>,
     
@@ -519,14 +522,14 @@ pub struct VerifyAgent<'info> {
 pub struct SendMessage<'info> {
     #[account(
         seeds = [b"agent", agent.authority.as_ref()],
-        bump = agent.bump
+        bump
     )]
     pub agent: Account<'info, Agent>,
     
     #[account(
         mut,
         seeds = [b"network", network.token_mint.as_ref()],
-        bump = network.bump
+        bump
     )]
     pub network: Account<'info, NetworkState>,
     
@@ -565,14 +568,14 @@ pub struct SendMessage<'info> {
 pub struct CreateService<'info> {
     #[account(
         seeds = [b"agent", agent.authority.as_ref()],
-        bump = agent.bump
+        bump
     )]
     pub agent: Account<'info, Agent>,
     
     #[account(
         mut,
         seeds = [b"network", network.token_mint.as_ref()],
-        bump = network.bump
+        bump
     )]
     pub network: Account<'info, NetworkState>,
     
@@ -609,7 +612,7 @@ pub struct CompleteService<'info> {
     
     #[account(
         mut,
-        seeds = [b"service", @service.key().as_ref()],
+        seeds = [b"service", service.key().as_ref()],
         bump = service.bump
     )]
     pub service: Account<'info, Service>,
@@ -638,7 +641,7 @@ pub struct UpdateNetworkParams<'info> {
     #[account(
         mut,
         seeds = [b"network", network.token_mint.as_ref()],
-        bump = network.bump,
+        bump,
         has_one = authority
     )]
     pub network: Account<'info, NetworkState>,
@@ -651,7 +654,7 @@ pub struct WithdrawFees<'info> {
     #[account(
         mut,
         seeds = [b"network", network.token_mint.as_ref()],
-        bump = network.bump,
+        bump,
         has_one = authority
     )]
     pub network: Account<'info, NetworkState>,
@@ -879,16 +882,3 @@ fn _is_identifier_used(identifiers: &[String; 100], identifier: &str) -> bool {
 fn get_network_token_account(token_mint: &Pubkey) -> Pubkey {
     Pubkey::find_program_address(&[b"network-token", token_mint.as_ref()], &ID).0
 }
-
-// ============ Token CPI ============
-
-#[derive(Clone)]
-pub struct Token;
-
-impl anchor_lang::Id for Token {
-    fn id() -> Pubkey {
-        spl_token::ID
-    }
-}
-
-use anchor_spl::token::{self, TokenAccount, Transfer, Mint};

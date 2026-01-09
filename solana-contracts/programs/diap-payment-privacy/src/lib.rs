@@ -1,4 +1,4 @@
-//! DIAP Payment Privacy Program
+﻿//! DIAP Payment Privacy Program
 //! 
 //! Privacy-preserving payments using commitments and nullifiers.
 //! Adapted from Solidity DIAPPaymentPrivacy.sol
@@ -6,7 +6,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
 
-declare_id!("3WEwXwX9TjF7w4p4q4q4q4q4q4q4q4q4q4q4q4q4q4q");
+declare_id!("11111111111111111111111111111111");
 
 #[program]
 pub mod diap_payment_privacy {

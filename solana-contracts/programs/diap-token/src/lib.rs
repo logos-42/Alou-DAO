@@ -6,7 +6,7 @@
 //! Adapted from Solidity DIAPToken.sol to Solana/Anchor.
 
 use anchor_lang::prelude::*;
-use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer, MintTo, Burn, BurnTo, MintTo};
+use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer, MintTo, Burn};
 
 declare_id!("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
 
@@ -22,12 +22,9 @@ pub mod diap_token {
         decimals: u8,
         max_supply: u64,
     ) -> Result<()> {
-        let mint = &mut ctx.accounts.mint;
-        mint.mint_authority = Some(CpiAccount::from(ctx.accounts.mint.clone()).authority);
-        mint.freeze_authority = Some(CpiAccount::from(ctx.accounts.mint.clone()).authority);
-
         let config = &mut ctx.accounts.config;
         config.authority = ctx.accounts.authority.key();
+        config.token_mint = ctx.accounts.token_mint.key();
         config.token_name = token_name;
         config.token_symbol = token_symbol;
         config.max_supply = max_supply;
@@ -136,7 +133,6 @@ pub mod diap_token {
     /// Unstake tokens
     pub fn unstake(ctx: Context<Unstake>) -> Result<()> {
         let staking_info = &mut ctx.accounts.staking_info;
-        let config = &mut ctx.accounts.config;
         let clock = Clock::get()?;
 
         require!(staking_info.amount > 0, ErrorCode::NoStakingFound);
@@ -146,6 +142,7 @@ pub mod diap_token {
         );
 
         let amount = staking_info.amount;
+        let config = &ctx.accounts.config;
         let rewards = calculate_rewards(staking_info, config, clock.unix_timestamp)?;
 
         // Transfer staked tokens back
@@ -239,7 +236,7 @@ pub mod diap_token {
         token::burn(
             CpiContext::new(
                 ctx.accounts.token_program.to_account_info(),
-                BurnTo {
+                Burn {
                     mint: ctx.accounts.token_mint.to_account_info(),
                     from: ctx.accounts.user_token_account.to_account_info(),
                     authority: ctx.accounts.signer.to_account_info(),
@@ -404,7 +401,7 @@ pub struct MintTokens<'info> {
     #[account(
         mut,
         seeds = [b"config", token_mint.key().as_ref()],
-        bump = config.bump,
+        bump,
         has_one = token_mint,
         has_one = authority
     )]
@@ -431,7 +428,7 @@ pub struct Stake<'info> {
     #[account(
         mut,
         seeds = [b"config", token_mint.key().as_ref()],
-        bump = config.bump,
+        bump,
         has_one = token_mint
     )]
     pub config: Account<'info, TokenConfig>,
@@ -470,7 +467,7 @@ pub struct Unstake<'info> {
     #[account(
         mut,
         seeds = [b"config", token_mint.key().as_ref()],
-        bump = config.bump,
+        bump,
         has_one = token_mint
     )]
     pub config: Account<'info, TokenConfig>,
@@ -504,7 +501,7 @@ pub struct ClaimRewards<'info> {
     #[account(
         mut,
         seeds = [b"config", token_mint.key().as_ref()],
-        bump = config.bump,
+        bump,
         has_one = token_mint
     )]
     pub config: Account<'info, TokenConfig>,
@@ -538,7 +535,7 @@ pub struct BurnTokens<'info> {
     #[account(
         mut,
         seeds = [b"config", token_mint.key().as_ref()],
-        bump = config.bump,
+        bump,
         has_one = token_mint
     )]
     pub config: Account<'info, TokenConfig>,
@@ -590,7 +587,7 @@ pub struct EmergencyWithdraw<'info> {
     #[account(
         mut,
         seeds = [b"config", token_mint.key().as_ref()],
-        bump = config.bump,
+        bump,
         has_one = token_mint
     )]
     pub config: Account<'info, TokenConfig>,
@@ -786,6 +783,8 @@ pub enum ErrorCode {
     MathOverflow,
     #[msg("Math underflow")]
     MathUnderflow,
+    #[msg("Math division error")]
+    MathDivision,
     #[msg("Emergency withdraw not enabled")]
     EmergencyWithdrawNotEnabled,
 }
@@ -814,7 +813,7 @@ fn get_staking_tier(tier: u8) -> Result<StakingTier> {
             multiplier: 30000, // 3x
             lock_period: 365 * 24 * 60 * 60, // 365 days
         }),
-        _ => Err(ErrorCode::InvalidTier),
+        _ => Err(ErrorCode::InvalidTier.into()),
     }
 }
 
@@ -850,11 +849,11 @@ fn calculate_rewards(
     Ok(staking_info.pending_rewards.checked_add(tier_rewards).ok_or(ErrorCode::MathOverflow)?)
 }
 
-fn distribute_rewards(
-    config: AccountInfo,
-    recipient_token_account: AccountInfo,
-    staking_pool_token_account: AccountInfo,
-    token_program: AccountInfo,
+fn distribute_rewards<'info>(
+    config: AccountInfo<'info>,
+    recipient_token_account: AccountInfo<'info>,
+    staking_pool_token_account: AccountInfo<'info>,
+    token_program: AccountInfo<'info>,
     amount: u64,
     signer_seeds: &[&[&[u8]]],
 ) -> Result<()> {

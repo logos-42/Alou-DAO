@@ -85,9 +85,8 @@ pub mod diap_payment_core {
         // and that the payment is not expired (e.g., 24 hours has not passed)
         
         // Calculate fee and total
-        let core = &ctx.accounts.payment_core;
         let fee = payment.amount
-            .checked_mul(core.payment_fee_rate as u64)
+            .checked_mul(ctx.accounts.payment_core.payment_fee_rate as u64)
             .ok_or(ErrorCode::MathOverflow)?
             .checked_div(10000)
             .ok_or(ErrorCode::MathDivision)?;
@@ -96,7 +95,7 @@ pub mod diap_payment_core {
         // In a real implementation, the token transfer would happen here
         payment.status = PaymentStatus::Confirmed as u8;
 
-        core.total_volume = core.total_volume.checked_add(payment.amount).ok_or(ErrorCode::MathOverflow)?;
+        ctx.accounts.payment_core.total_volume = ctx.accounts.payment_core.total_volume.checked_add(payment.amount).ok_or(ErrorCode::MathOverflow)?;
 
         emit!(PaymentConfirmedEvent {
             payment_id: payment.payment_id.clone(),
@@ -118,7 +117,7 @@ pub mod diap_payment_core {
 
         emit!(PaymentCancelledEvent {
             payment_id: payment.payment_id.clone(),
-            reason: "Cancelled by sender",
+            reason: "Cancelled by sender".to_string(),
         });
 
         Ok(())
@@ -185,6 +184,8 @@ pub mod diap_payment_core {
         
         // In real implementation, would check that the completion is from the provider
         // and that the service is not expired (e.g., 30 days has not passed)
+        
+        let clock = Clock::get()?;
         
         let clock = Clock::get()?;
         service.status = ServiceStatus::Completed as u8;
@@ -264,31 +265,32 @@ pub struct Initialize<'info> {
 pub struct CreatePayment<'info> {
     #[account(
         init,
-        payer = from,
+        payer = payer,
         space = 8 + Payment::LEN,
         seeds = [b"payment", payment_id.as_bytes()],
         bump
     )]
     pub payment: Account<'info, Payment>,
-    
+
     #[account(
         mut,
         seeds = [b"payment-core", token_mint.key().as_ref()],
         bump = payment_core.bump
     )]
     pub payment_core: Account<'info, PaymentCore>,
-    
+
     /// CHECK: Sender address (should be an active agent in real implementation)
+    #[account(mut)]
     pub from: UncheckedAccount<'info>,
-    
+
     /// CHECK: Recipient address (should be an active agent in real implementation)
     pub to: UncheckedAccount<'info>,
-    
+
     pub token_mint: Account<'info, Mint>,
-    
+
     #[account(mut)]
-    pub from_signer: Signer<'info>,
-    
+    pub payer: Signer<'info>,
+
     pub system_program: Program<'info, System>,
 }
 
@@ -361,10 +363,19 @@ pub struct CreateServiceOrder<'info> {
 pub struct CompleteServiceOrder<'info> {
     #[account(
         mut,
-        seeds = [b"service", @service.key().as_ref()],
+        seeds = [b"service", service.key().as_ref()],
         bump = service.bump
     )]
     pub service: Account<'info, Service>,
+    
+    #[account(
+        mut,
+        seeds = [b"payment-core", token_mint.key().as_ref()],
+        bump = payment_core.bump
+    )]
+    pub payment_core: Account<'info, PaymentCore>,
+    
+    pub token_mint: Account<'info, Mint>,
     
     /// CHECK: Should be the provider of the service
     pub provider: Signer<'info>,
@@ -374,7 +385,7 @@ pub struct CompleteServiceOrder<'info> {
 pub struct CancelServiceOrder<'info> {
     #[account(
         mut,
-        seeds = [b"service", @service.key().as_ref()],
+        seeds = [b"service", service.key().as_ref()],
         bump = service.bump
     )]
     pub service: Account<'info, Service>,

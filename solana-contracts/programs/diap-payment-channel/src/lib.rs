@@ -178,43 +178,49 @@ pub mod diap_payment_channel {
         
         require!(total_to_distribute + fee <= channel.total_deposited, ErrorCode::InsufficientFunds);
 
+        // Get channel values before mutable borrow
+        let balance1 = channel.balance1;
+        let balance2 = channel.balance2;
+        let channel_id = channel.channel_id.clone();
+        let bump = channel.bump;
+
         // Distribute funds to participants
-        if channel.balance1 > 0 {
+        if balance1 > 0 {
             let cpi_accounts = Transfer {
                 from: ctx.accounts.channel_vault.to_account_info(),
                 to: ctx.accounts.participant1_token_account.to_account_info(),
-                authority: ctx.accounts.channel.to_account_info(),
+                authority: channel.to_account_info(),
             };
             let cpi_program = ctx.accounts.token_program.to_account_info();
             
             let seeds = &[
                 b"channel", 
-                channel.channel_id.as_bytes(),
-                &[channel.bump]
+                channel_id.as_bytes(),
+                &[bump]
             ];
             let signer_seeds = &[&seeds[..]];
             
             let cpi_ctx = CpiContext::new_with_signer(cpi_program, cpi_accounts, signer_seeds);
-            token::transfer(cpi_ctx, channel.balance1)?;
+            token::transfer(cpi_ctx, balance1)?;
         }
 
-        if channel.balance2 > 0 {
+        if balance2 > 0 {
             let cpi_accounts = Transfer {
                 from: ctx.accounts.channel_vault.to_account_info(),
                 to: ctx.accounts.participant2_token_account.to_account_info(),
-                authority: ctx.accounts.channel.to_account_info(),
+                authority: channel.to_account_info(),
             };
             let cpi_program = ctx.accounts.token_program.to_account_info();
             
             let seeds = &[
                 b"channel", 
-                channel.channel_id.as_bytes(),
-                &[channel.bump]
+                channel_id.as_bytes(),
+                &[bump]
             ];
             let signer_seeds = &[&seeds[..]];
             
             let cpi_ctx = CpiContext::new_with_signer(cpi_program, cpi_accounts, signer_seeds);
-            token::transfer(cpi_ctx, channel.balance2)?;
+            token::transfer(cpi_ctx, balance2)?;
         }
 
         channel.is_active = false;

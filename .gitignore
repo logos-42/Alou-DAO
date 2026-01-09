@@ -78,8 +78,30 @@ deployments/
 private_key*
 *secret*
 
- Documentation (optional - uncomment if you want to ignore)
- DIAP_README.md
+# Documentation (optional - uncomment if you want to ignore)
+# DIAP_README.md
 
- TOKEN_METADATA_SUMMARY.md
- ARCHITECTURE.md
+TOKEN_METADATA_SUMMARY.md
+ARCHITECTURE.md
+
+# Solana & Rust
+target/
+**/*.rs.bk
+Cargo.lock
+
+# Anchor
+test-ledger/
+.anchor/
+
+# Solana keypairs (keep only necessary JSON files)
+*.json
+!package.json
+!package-lock.json
+!token-metadata.json
+!tsconfig.json
+!solana-contracts/**/Cargo.toml
+!solana-contracts/Anchor.toml
+!solana-contracts/**/src/**.rs
+
+# IDL files (auto-generated)
+idl/

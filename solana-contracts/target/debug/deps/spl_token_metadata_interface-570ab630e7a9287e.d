@@ -1,8 +1,0 @@
-D:\DAO\Smart ETH\solana-contracts\target\debug\deps\spl_token_metadata_interface-570ab630e7a9287e.d: C:\Users\Mechrevo\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\spl-token-metadata-interface-0.3.5\src\lib.rs C:\Users\Mechrevo\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\spl-token-metadata-interface-0.3.5\src\error.rs C:\Users\Mechrevo\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\spl-token-metadata-interface-0.3.5\src\instruction.rs C:\Users\Mechrevo\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\spl-token-metadata-interface-0.3.5\src\state.rs
-
-D:\DAO\Smart ETH\solana-contracts\target\debug\deps\libspl_token_metadata_interface-570ab630e7a9287e.rmeta: C:\Users\Mechrevo\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\spl-token-metadata-interface-0.3.5\src\lib.rs C:\Users\Mechrevo\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\spl-token-metadata-interface-0.3.5\src\error.rs C:\Users\Mechrevo\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\spl-token-metadata-interface-0.3.5\src\instruction.rs C:\Users\Mechrevo\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\spl-token-metadata-interface-0.3.5\src\state.rs
-
-C:\Users\Mechrevo\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\spl-token-metadata-interface-0.3.5\src\lib.rs:
-C:\Users\Mechrevo\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\spl-token-metadata-interface-0.3.5\src\error.rs:
-C:\Users\Mechrevo\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\spl-token-metadata-interface-0.3.5\src\instruction.rs:
-C:\Users\Mechrevo\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\spl-token-metadata-interface-0.3.5\src\state.rs:

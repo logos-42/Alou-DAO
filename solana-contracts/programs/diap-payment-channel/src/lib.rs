@@ -3,6 +3,8 @@
 //! State channels for off-chain payments with on-chain settlement.
 //! Adapted from Solidity DIAPPaymentChannel.sol
 
+#![allow(unexpected_cfgs)]
+
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
 

@@ -5,6 +5,8 @@
 //!
 //! Adapted from Solidity DIAPToken.sol to Solana/Anchor.
 
+#![allow(unexpected_cfgs)]
+
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer, MintTo, Burn};
 

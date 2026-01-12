@@ -114,7 +114,9 @@ pub mod diap_verification {
             session.status = VerificationStatus::Verified as u8;
             session.is_valid = true;
             
-            ctx.accounts.verification.total_successful_verifications = ctx.accounts.verification.total_successful_verifications.checked_add(1).ok_or(ErrorCode::MathOverflow)?;
+            // Update verification stats - use reborrow to avoid conflict
+            let verification = &mut *ctx.accounts.verification;
+            verification.total_successful_verifications = verification.total_successful_verifications.checked_add(1).ok_or(ErrorCode::MathOverflow)?;
 
             // Store identity proof
             let identity_proof = &mut ctx.accounts.identity_proof;
@@ -146,7 +148,9 @@ pub mod diap_verification {
             session.status = VerificationStatus::Failed as u8;
             session.is_valid = false;
             
-            ctx.accounts.verification.total_failed_verifications = ctx.accounts.verification.total_failed_verifications.checked_add(1).ok_or(ErrorCode::MathOverflow)?;
+            // Update verification stats - use reborrow to avoid conflict
+            let verification = &mut *ctx.accounts.verification;
+            verification.total_failed_verifications = verification.total_failed_verifications.checked_add(1).ok_or(ErrorCode::MathOverflow)?;
 
             // Increment failed attempts
             agent.failed_attempts = agent.failed_attempts.checked_add(1).ok_or(ErrorCode::MathOverflow)?;
@@ -439,7 +443,7 @@ pub struct VerifyReputation<'info> {
     pub verification: Account<'info, Verification>,
     
     #[account(
-        seeds = [b"agent", agent.as_ref()],
+        seeds = [b"agent", agent.to_bytes().as_ref()],
         bump
     )]
     pub agent_record: Account<'info, AgentRecord>,
@@ -448,7 +452,7 @@ pub struct VerifyReputation<'info> {
         init,
         payer = authority,
         space = 8 + ReputationProof::LEN,
-        seeds = [b"reputation-proof", agent.as_ref()],
+        seeds = [b"reputation-proof", agent.to_bytes().as_ref()],
         bump
     )]
     pub reputation_proof: Account<'info, ReputationProof>,

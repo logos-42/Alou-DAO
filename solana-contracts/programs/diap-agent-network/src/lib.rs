@@ -92,6 +92,7 @@ pub mod diap_agent_network {
         agent.is_active = true;
         agent.is_verified = false;
         agent.bump = ctx.bumps.agent;
+        let agent_authority = agent.authority; // Store for later use
 
         // Update identifier mapping
         let idx = ctx.accounts.identifier_to_agent.idx;
@@ -106,7 +107,7 @@ pub mod diap_agent_network {
         network.accumulated_fees = network.accumulated_fees.checked_add(network.registration_fee).ok_or(ErrorCode::MathOverflow)?;
 
         emit!(AgentRegisteredEvent {
-            agent: agent.authority,
+            agent: agent_authority,
             identifier: agent.identifier.clone(),
             staked_amount,
         });
